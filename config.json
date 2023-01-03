@@ -1,0 +1,26 @@
+{
+  "pkgs":[
+    "hello"
+  ],
+  "rtthread":[
+    {
+      "name": "master",
+      "path": "rtthread/master",
+      "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/heads/master"
+    },
+    {
+      "name": "v4.1.1",
+      "path": "rtthread/v4.1.1",
+      "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/v4.1.1"
+    }
+  ],
+  "toolchains":[
+    {"name": "sourcery-arm", "path": "toolchains/arm", "url": "https://github.com/RT-Thread/toolchains-ci/releases/download/v1.3/gcc-arm-none-eabi-10-2020-q4-major-x86_64-linux.tar.bz2"},
+    {"name": "sourcery-riscv-none-embed", "path": "toolchains/riscv-none-embed", "url": "https://github.com/RT-Thread/toolchains-ci/releases/download/v1.5/xpack-riscv-none-embed-gcc-8.3.0-2.3-linux-x64.tar.gz"}
+  ],
+  "bsps": [
+    {"name": "qemu-vexpress-a9", "toolchain": "sourcery-arm"},
+    {"name": "stm32/stm32h750-artpi", "toolchain": "sourcery-arm"},
+    {"name": "k210", "toolchain": "sourcery-riscv-none-embed"}
+  ]
+}
