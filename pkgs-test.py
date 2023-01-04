@@ -324,8 +324,6 @@ if __name__ == '__main__':
     time_old=datetime.now() 
     config_json = get_config(args.config)
 
-    get_resources(config_json)
-
     if args.pkg:
         pkgs_name = args.pkg
     else:
@@ -333,6 +331,8 @@ if __name__ == '__main__':
             print("pkgs field is None!")
             exit(0)
         pkgs_name = list(config_json['pkgs'])
+        
+    get_resources(config_json)
 
     if sys.platform != 'win32':
         home_dir = os.environ['HOME']
