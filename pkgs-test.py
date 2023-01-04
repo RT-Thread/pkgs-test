@@ -194,7 +194,12 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
             flag = 'Success'
         else:
             flag = 'Failure'
-
+    if flag == 'Success':
+        flag = 'Failure'
+        for name in os.listdir(os.path.join(bsp_path,'packages')):
+            if name in bsp_path:
+                flag = 'Success'
+                break
     if flag == 'Success':
         os.environ['RTT_CC'] = 'gcc'
         os.environ['RTT_EXEC_PATH'] = os.path.join(cwd, tools)
