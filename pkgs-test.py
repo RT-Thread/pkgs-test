@@ -327,7 +327,7 @@ if __name__ == '__main__':
     if args.pkg:
         pkgs_name = args.pkg
     else:
-        if config_json['pkgs'] == None:
+        if config_json['pkgs'] == None or config_json['pkgs'] == []:
             print("pkgs field is None!")
             exit(0)
         pkgs_name = list(config_json['pkgs'])
