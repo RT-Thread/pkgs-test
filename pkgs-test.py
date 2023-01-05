@@ -12,7 +12,6 @@ from datetime import datetime
 import re
 from HTMLTable import HTMLTable
 import html
-import fcntl
 
 # pip install scons requests tqdm wget html-table
 def create_pkgs_dict(pkgs_path):
@@ -153,7 +152,6 @@ def get_pkgs(dict, pkgs):
 def logs():
     logs_html = table(config_json, pkgs_config_dict)
     with open('artifacts_export/index.html', 'w') as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         for log in logs_html:
             f.write(log)
 
