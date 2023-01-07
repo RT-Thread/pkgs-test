@@ -12,7 +12,6 @@ from datetime import datetime
 import re
 from HTMLTable import HTMLTable
 import html
-import fcntl
 
 # pip install scons requests tqdm wget html-table
 def create_pkgs_dict(pkgs_path):
@@ -153,7 +152,6 @@ def get_pkgs(dict, pkgs):
 def logs():
     logs_html = table(config_json, pkgs_config_dict)
     with open('artifacts_export/index.html', 'w') as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         for log in logs_html:
             f.write(log)
 
@@ -194,7 +192,12 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
             flag = 'Success'
         else:
             flag = 'Failure'
-
+    if flag == 'Success':
+        flag = 'Failure'
+        for name in os.listdir(os.path.join(bsp_path,'packages')):
+            if name in bsp_path:
+                flag = 'Success'
+                break
     if flag == 'Success':
         os.environ['RTT_CC'] = 'gcc'
         os.environ['RTT_EXEC_PATH'] = os.path.join(cwd, tools)
@@ -290,53 +293,57 @@ def table(config, pkgs):
         logs.append(html.unescape(table.to_html()))
     return logs
 
-parser = argparse.ArgumentParser()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
 
-parser.add_argument('--version', '-v', action='version',
-                    version='%(prog)s version : v0.0.1', help='show the version')
-parser.add_argument('--config', action='store',
-                    help='Specify the configuration path',
-                    default='config.json')
-parser.add_argument('--pkg', '-p', action='store',
-                    help='Specify Package Name',
-                    default=[])
-                    
-parser.add_argument('-j', action='store',type=int,
-                    help='Allow N jobs at once, default 16',
-                    default=16)
-                    
-parser.add_argument('--nolatest', action='store_true',
-                    help='Whether to test nolatest, default False',
-                    default=False)
+    parser.add_argument('--version', '-v', action='version',
+                        version='%(prog)s version : v0.0.1', help='show the version')
+    parser.add_argument('--config', action='store',
+                        help='Specify the configuration path',
+                        default='config.json')
+    parser.add_argument('--pkg', '-p', action='store',
+                        help='Specify Package Name',
+                        default=[])
+                        
+    parser.add_argument('-j', action='store',type=int,
+                        help='Allow N jobs at once, default 16',
+                        default=16)
+                        
+    parser.add_argument('--nolatest', action='store_true',
+                        help='Whether to test nolatest, default False',
+                        default=False)
 
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-sem=threading.Semaphore(args.j)
+    sem=threading.Semaphore(args.j)
 
-root_path = os.getcwd()
-time_old=datetime.now() 
-config_json = get_config(args.config)
+    root_path = os.getcwd()
+    time_old=datetime.now() 
+    config_json = get_config(args.config)
 
-get_resources(config_json)
+    if args.pkg:
+        pkgs_name = args.pkg
+    else:
+        if config_json['pkgs'] == None or config_json['pkgs'] == []:
+            print("pkgs field is None!")
+            exit(0)
+        pkgs_name = list(config_json['pkgs'])
+        
+    get_resources(config_json)
 
-if args.pkg:
-    pkgs_name = args.pkg
-else:
-    pkgs_name = list(config_json['pkgs'])
+    if sys.platform != 'win32':
+        home_dir = os.environ['HOME']
+    else:
+        home_dir = os.environ['USERPROFILE']
 
-if sys.platform != 'win32':
-    home_dir = os.environ['HOME']
-else:
-    home_dir = os.environ['USERPROFILE']
+    pkgs_all_dict = create_pkgs_dict(os.path.join(home_dir, '.env/packages/packages'))
 
-pkgs_all_dict = create_pkgs_dict(os.path.join(home_dir, '.env/packages/packages'))
+    pkgs_config_dict = get_pkgs(pkgs_all_dict, pkgs_name)
+    print(pkgs_config_dict)
 
-pkgs_config_dict = get_pkgs(pkgs_all_dict, pkgs_name)
-print(pkgs_config_dict)
+    build_all(config_json, pkgs_config_dict)
 
-build_all(config_json, pkgs_config_dict)
-
-time_new=datetime.now() 
-print(time_new-time_old)
-print('Please via browser open ' + os.path.join(os.getcwd(),'artifacts_export/index.html') + ' view results!!')
+    time_new=datetime.now() 
+    print(time_new-time_old)
+    print('Please via browser open ' + os.path.join(os.getcwd(),'artifacts_export/index.html') + ' view results!!')
