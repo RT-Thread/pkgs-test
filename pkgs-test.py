@@ -151,6 +151,8 @@ def get_pkgs(dict, pkgs):
 
 def logs():
     logs_html = table(config_json, pkgs_config_dict)
+    if not os.path.exists("artifacts_export"):
+        os.makedirs("artifacts_export")
     with open('artifacts_export/index.html', 'w') as f:
         for log in logs_html:
             f.write(log)
@@ -192,11 +194,13 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
             flag = 'Success'
         else:
             flag = 'Failure'
+    pkg_path = ''
     if flag == 'Success':
         flag = 'Failure'
         for name in os.listdir(os.path.join(bsp_path,'packages')):
             if name in bsp_path:
                 flag = 'Success'
+                pkg_path = name
                 break
     if flag == 'Success':
         os.environ['RTT_CC'] = 'gcc'
@@ -217,13 +221,37 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
     file.close()
     os.rename(log_path, log_path + '-' + flag + '.txt')
     print('mv ' + log_path + ' ' + log_path + '-' + flag + '.txt')
-    shutil.rmtree(bsp_path)
+    if flag != 'Failure':
+        shutil.rmtree(bsp_path)
+    elif name:
+        error = []
+        if os.path.isfile('error.json'):
+            with open('error.json', 'rb') as f:
+                error = json.load(f)
+        dict = {}
+        dict.setdefault('name', name)
+        dict.setdefault('bsp', bsp_path)
+        dict.setdefault('tool', tools)
+        dict.setdefault('log', log_path)
+        error.append(dict)
+        
+        file = open('error.json','w')
+        file.write(json.dumps(error, indent=2, ensure_ascii=False))
+        file.close()
+        
+        if not os.path.isdir('local_pkgs'):
+            os.makedirs('local_pkgs')
+        if not os.path.isdir(os.path.join('local_pkgs',name)):
+            shutil.copytree(os.path.join(bsp_path,'packages',name), os.path.join('local_pkgs',name))
+
     sem.release()
 
 def build_all(config, pkgs):
     count = 0
     threads = []
     data = config
+    if os.path.isfile('error.json'):
+        os.remove('error.json')
     if os.path.exists('artifacts_export/log'):
         shutil.rmtree('artifacts_export/log')
     for rtthread_ver in data['rtthread']:

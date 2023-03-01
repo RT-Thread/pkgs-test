@@ -2,3 +2,5 @@ toolchains
 artifacts_export
 download
 rtthread
+local_pkgs
+error.json
