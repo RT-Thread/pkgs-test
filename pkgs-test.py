@@ -203,12 +203,15 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
                 pkg_path = name
                 break
     if flag == 'Success':
+        if 'stm32' in bsp_path:
+            sem_stm32.acquire()
         os.environ['RTT_CC'] = 'gcc'
         os.environ['RTT_EXEC_PATH'] = os.path.join(cwd, tools)
         command = 'scons -j16'
         print(bsp_path + ' ' + command)
-
         ret = os.system(command + ' -C ' + bsp_path + ' >> ' + log_path + ' 2>&1')
+        if 'stm32' in bsp_path:
+            sem_stm32.release()
         if ret == 0:
             flag = 'Success'
         else:
@@ -417,6 +420,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     sem=threading.Semaphore(args.j)
+    sem_stm32=threading.Semaphore(1)
 
     root_path = os.getcwd()
     time_old=datetime.now() 
