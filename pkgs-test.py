@@ -151,6 +151,8 @@ def get_pkgs(dict, pkgs):
 
 def logs():
     logs_html = table(config_json, pkgs_config_dict)
+    if not os.path.exists("artifacts_export"):
+        os.makedirs("artifacts_export")
     with open('artifacts_export/index.html', 'w') as f:
         for log in logs_html:
             f.write(log)
@@ -192,12 +194,86 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
             flag = 'Success'
         else:
             flag = 'Failure'
+    pkg_path = ''
     if flag == 'Success':
         flag = 'Failure'
         for name in os.listdir(os.path.join(bsp_path,'packages')):
             if name in bsp_path:
                 flag = 'Success'
+                pkg_path = name
                 break
+    if flag == 'Success':
+        if 'stm32' in bsp_path:
+            sem_stm32.acquire()
+        os.environ['RTT_CC'] = 'gcc'
+        os.environ['RTT_EXEC_PATH'] = os.path.join(cwd, tools)
+        command = 'scons -j16'
+        print(bsp_path + ' ' + command)
+        ret = os.system(command + ' -C ' + bsp_path + ' >> ' + log_path + ' 2>&1')
+        if 'stm32' in bsp_path:
+            sem_stm32.release()
+        if ret == 0:
+            flag = 'Success'
+        else:
+            flag = 'Failure'
+    
+    file = open(log_path,'a+')
+    file.write('\n\n')
+    for log in logs:
+        file.write(log + '\n')
+    file.close()
+    os.rename(log_path, log_path + '-' + flag + '.txt')
+    print('mv ' + log_path + ' ' + log_path + '-' + flag + '.txt')
+
+    if not args.debug:
+        shutil.rmtree(bsp_path)
+        sem.release()
+    elif name:
+        error = []
+        if os.path.isfile('error.json'):
+            with open('error.json', 'rb') as f:
+                error = json.load(f)
+        dict = {}
+        dict.setdefault('name', name)
+        dict.setdefault('bsp', bsp_path)
+        dict.setdefault('tool', tools)
+        dict.setdefault('log', log_path)
+        error.append(dict)
+        
+        file = open('error.json','w')
+        file.write(json.dumps(error, indent=2, ensure_ascii=False))
+        file.close()
+        
+        if not os.path.isdir('local_pkgs'):
+            os.makedirs('local_pkgs')
+        if not os.path.isdir(os.path.join('local_pkgs',name)):
+            shutil.copytree(os.path.join(bsp_path,'packages',name), os.path.join('local_pkgs',name))
+
+def build_failure(pkg, bsp_path, tools, log_path):
+    # 0 Initial 1 Success 2 Failure 3 Invalid
+    flag = 'Success'
+    logs = []
+    if not os.path.isdir(bsp_path):
+        print(bsp_path, 'No path !!!')
+        return
+
+    cwd = os.getcwd()
+    
+    if not os.path.isdir(os.path.dirname(log_path)):
+        os.makedirs(os.path.dirname(log_path))
+
+    pkg_log = os.path.basename(log_path)
+    for name in os.listdir(os.path.dirname(log_path)):
+        if pkg_log in name:
+            os.remove(os.path.join(os.path.dirname(log_path), name))
+            break
+
+    if os.path.isdir(os.path.join(bsp_path,'packages',pkg)):
+        shutil.rmtree(os.path.join(bsp_path,'packages',pkg))
+    
+    if os.path.isdir(os.path.join('local_pkgs',pkg)):
+        shutil.copytree(os.path.join('local_pkgs',pkg), os.path.join(bsp_path,'packages',pkg))
+        
     if flag == 'Success':
         os.environ['RTT_CC'] = 'gcc'
         os.environ['RTT_EXEC_PATH'] = os.path.join(cwd, tools)
@@ -217,13 +293,33 @@ def build(bsp_path, pkg_name, pkg_ver, tools, log_path):
     file.close()
     os.rename(log_path, log_path + '-' + flag + '.txt')
     print('mv ' + log_path + ' ' + log_path + '-' + flag + '.txt')
-    shutil.rmtree(bsp_path)
-    sem.release()
+
+
+def build_failures(error):
+    if os.path.isfile(error):
+        data = []
+        with open(error, 'rb') as f:
+            data = json.load(f)
+        for err in data:
+            build_failure(err['name'], err['bsp'], err['tool'], err['log'])
+    logs()
+
+def clean_bsps(error):
+    if os.path.isfile(error):
+        data = []
+        with open(error, 'rb') as f:
+            data = json.load(f)
+        for err in data:
+            if os.path.isdir(err['bsp']):
+                shutil.rmtree(err['bsp'])
+        os.remove('error.json')
 
 def build_all(config, pkgs):
     count = 0
     threads = []
     data = config
+    if os.path.isfile('error.json'):
+        os.remove('error.json')
     if os.path.exists('artifacts_export/log'):
         shutil.rmtree('artifacts_export/log')
     for rtthread_ver in data['rtthread']:
@@ -270,6 +366,7 @@ def table(config, pkgs):
             for pkg in pkgs:
                 pkg_table = HTMLTable()
                 pkg_rows = list()
+                error_flag = ''
                 for pkg_ver in pkg['pkg']:
                     link = ''
                     log_file = os.path.join('log', rtthread_ver['name'], bsp['name'], pkg['name'] + '-' + pkg_ver['version'])
@@ -286,7 +383,12 @@ def table(config, pkgs):
                         else:
                             link = '<a href="' + log_file + '">Incomplete</a>'
                     pkg_rows.append([pkg_ver['version'],link])
+                    if (('latest' in pkg_ver['version']) and len(pkg['pkg'])==1) or \
+                    (('Failure' in log_file) and (not 'latest' in pkg_ver['version'])):
+                        error_flag = 'error'
                 pkg_table.append_data_rows((pkg_rows))
+                if error_flag and (not 'master' in rtthread_ver['name']):
+                    pkg_table.set_style({'background-color': '#f00',})
                 data_rows.append(html.unescape(pkg_table.to_html()))
             data_rows.insert(0,bsp['name'])
             table.append_data_rows((data_rows,))
@@ -312,11 +414,19 @@ if __name__ == '__main__':
     parser.add_argument('--nolatest', action='store_true',
                         help='Whether to test nolatest, default False',
                         default=False)
+    
+    parser.add_argument('--debug', '-d', action='store_true',
+                        help='Debug mode, which does not delete the generated compiled bsp!!',
+                        default=False)
 
+    parser.add_argument('--error', '-e', action='store_true',
+                        help='Test error, If it is not used, it will not affect; if it is used, it will only test the wrong!!',
+                        default=False)
 
     args = parser.parse_args()
 
     sem=threading.Semaphore(args.j)
+    sem_stm32=threading.Semaphore(1)
 
     root_path = os.getcwd()
     time_old=datetime.now() 
@@ -342,7 +452,11 @@ if __name__ == '__main__':
     pkgs_config_dict = get_pkgs(pkgs_all_dict, pkgs_name)
     print(pkgs_config_dict)
 
-    build_all(config_json, pkgs_config_dict)
+    if args.error:
+        build_failures('error.json')
+    else:
+        clean_bsps('error.json')
+        build_all(config_json, pkgs_config_dict)
 
     time_new=datetime.now() 
     print(time_new-time_old)
