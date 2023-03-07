@@ -366,6 +366,7 @@ def table(config, pkgs):
             for pkg in pkgs:
                 pkg_table = HTMLTable()
                 pkg_rows = list()
+                error_flag = ''
                 for pkg_ver in pkg['pkg']:
                     link = ''
                     log_file = os.path.join('log', rtthread_ver['name'], bsp['name'], pkg['name'] + '-' + pkg_ver['version'])
@@ -382,7 +383,12 @@ def table(config, pkgs):
                         else:
                             link = '<a href="' + log_file + '">Incomplete</a>'
                     pkg_rows.append([pkg_ver['version'],link])
+                    if (('latest' in pkg_ver['version']) and len(pkg['pkg'])==1) or \
+                    (('Failure' in log_file) and (not 'latest' in pkg_ver['version'])):
+                        error_flag = 'error'
                 pkg_table.append_data_rows((pkg_rows))
+                if error_flag and (not 'master' in rtthread_ver['name']):
+                    pkg_table.set_style({'background-color': '#f00',})
                 data_rows.append(html.unescape(pkg_table.to_html()))
             data_rows.insert(0,bsp['name'])
             table.append_data_rows((data_rows,))
