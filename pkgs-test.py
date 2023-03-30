@@ -30,23 +30,27 @@ class PackagesIndex:
         for path in json_path:
             with open(os.path.join(path, 'package.json'), 'rb') as f:
                 data = json.load(f)
-                if 'name' in data and 'enable' in data and 'site' in data:
-                    dict = {'name': data['name'], 'enable': data['enable'], 'author': data['author'], 'repository': data['repository']}
-                    ver_dict = []
-                    for ver in data['site']:
-                        if not os.access(os.path.join(path, 'Kconfig'), os.R_OK):
-                            print(os.path.join(path, 'Kconfig') + "  No files!!")
-                            break
-                        f = open(os.path.join(path, 'Kconfig'))
-                        text = f.read()
-                        f.close()
-                        pattern = re.compile('(?<=(config ))(((?!(config|default|bool)).)*?)(?=(\n)(((?!('
-                                            'config|default|bool)).)*?)((default|bool)([^a-z]*?)(' + ver[
-                                                'version'] + ')))', re.M | re.S)
-                        if not (pattern.search(text) is None) and 'version' in ver:
-                            ver_dict.append({'version': ver['version'], 'enable': pattern.search(text).group()})
-                    dict.setdefault('pkg', ver_dict)
-                    dicts.append(dict)
+            if 'name' in data and 'enable' in data and 'site' in data:
+                dict = {'name': data['name'], 'enable': data['enable'], 'author': data['author'], 'repository': data['repository']}
+                ver_dict = []
+                for ver in data['site']:
+                    if not os.access(os.path.join(path, 'Kconfig'), os.R_OK):
+                        print(os.path.join(path, 'Kconfig') + "  No files!!")
+                        break
+                    f = open(os.path.join(path, 'Kconfig'))
+                    text = f.read()
+                    f.close()
+                    pattern = re.compile('(?<=(config ))(((?!(config|default|bool)).)*?)(?=(\n)(((?!('
+                                        'config|default|bool)).)*?)((default|bool)([^a-z]*?)(' + ver[
+                                            'version'] + ')))', re.M | re.S)
+                    if not (pattern.search(text) is None) and 'version' in ver:
+                        site = {'version': ver['version'], 'enable': pattern.search(text).group()}
+                        if ver['URL'][-4:] == '.git':
+                            site.setdefault('URL', ver['URL'])
+                            site.setdefault('VER_SHA', ver['VER_SHA'])
+                        ver_dict.append(site)
+                dict.setdefault('pkg', ver_dict)
+                dicts.append(dict)
         return dicts
 
     def __get_config_pkgs(self, pkgs):
@@ -87,15 +91,21 @@ class PackagesIndex:
         for pkg in self.dict:
             if repository_name.lower() in pkg['repository'].lower():
                 pkgs.append(pkg)
-        if not pkgs:
-            print('You may have changed the warehouse name while forking!!!')
-        elif len(pkgs) > 1:
+        if len(pkgs) > 1:
             pkgs_copy = list(pkgs)
             for pkg in pkgs_copy:
                 if not repository_name in pkg['repository']:
                     pkgs_copy.remove(pkg)
             if pkgs_copy:
                 pkgs = pkgs_copy
+        
+        if not pkgs:
+            print('You may have changed the warehouse name while forking!!!')
+            return []
+        
+        for pkg in pkgs[0]['pkg']:
+            if 'URL' in pkg:
+                pkg['URL'] = 'https://github.com/' + repository + '.git'
         return pkgs
 
     def name_seek(self, pkgs='all'):
@@ -290,10 +300,10 @@ class Build:
         self.root = os.getcwd()
         self.__debug = False
 
-    def __build_pyconfig(self, bsp_path, pkg_name, pkg_ver, log_path):
-        print('build', bsp_path, pkg_name, pkg_ver)
+    def __build_pyconfig(self, bsp_path, pkg, pkg_ver, log_path):
+        print('build', bsp_path, pkg['name'], pkg_ver['version'])
         f = open(os.path.join(bsp_path, '.config'),'a')
-        f.write('\nCONFIG_' + pkg_name + '=y\nCONFIG_' + pkg_ver + '=y\n')
+        f.write('\nCONFIG_' + pkg['enable'] + '=y\nCONFIG_' + pkg_ver['enable'] + '=y\n')
         f.close()
         if not os.path.exists(os.path.dirname(log_path)):
             os.makedirs(os.path.dirname(log_path))
@@ -306,11 +316,11 @@ class Build:
         else:
             return 'Failure'
 
-    def __build_pkgs_update(self, bsp_path, pkg_name, pkg_ver, log_path, flag):
+    def __build_pkgs_update(self, bsp_path, pkg, pkg_ver, log_path, flag):
         f = open(os.path.join(bsp_path, '.config'))
         text = f.read()
         f.close()
-        if (re.compile(pkg_name + '=').search(text) is None) or (re.compile(pkg_ver + '=').search(text) is None):
+        if (re.compile(pkg['enable'] + '=').search(text) is None) or (re.compile(pkg_ver['enable'] + '=').search(text) is None):
             flag = 'Invalid'
         if flag == 'Success':
             command = '(cd ' + bsp_path + ' && python ' + os.path.join(self.config.get_path('env'), 'tools/scripts/env.py') + ' package --update)'
@@ -328,6 +338,15 @@ class Build:
                     flag = 'Success'
                     pkg_path = name
                     break
+        if 'VER_SHA' in pkg_ver and 'URL' in pkg_ver:
+            path = os.path.join(bsp_path, 'packages', pkg_path)
+            shutil.rmtree(path)
+            clone_cmd = '(git clone ' + pkg_ver['URL'] + ' ' + path + ')'
+            command = '(echo "' + clone_cmd + '" && ' + clone_cmd + ')'
+            ret = os.system(command + ' >> ' + log_path + ' 2>&1')
+            git_check_cmd = '(cd '+ path + ' && git checkout ' + pkg_ver['VER_SHA'] + ')'
+            command = '(echo "' + git_check_cmd + '" && ' + git_check_cmd + ')'
+            ret = os.system(command + ' >> ' + log_path + ' 2>&1')
         return (flag, pkg_path)
 
     def __build_scons(self, bsp_path, tools, log_path, flag):
@@ -386,15 +405,15 @@ class Build:
         if not os.path.isdir(os.path.join('local_pkgs',name)):
             shutil.copytree(os.path.join(bsp_path,'packages',name), os.path.join('local_pkgs',name))
 
-    def __build(self, bsp_path, pkg_name, pkg_ver, tools, log_path):
+    def __build(self, bsp_path, pkg, pkg_ver, tools, log_path):
         flag = 'Success'
         logs = []
         if not os.path.isdir(bsp_path):
             print(bsp_path, 'No path !!!')
             return
 
-        flag = self.__build_pyconfig(bsp_path, pkg_name, pkg_ver, log_path)
-        (flag, pkg_path) = self.__build_pkgs_update(bsp_path, pkg_name, pkg_ver, log_path, flag)
+        flag = self.__build_pyconfig(bsp_path, pkg, pkg_ver, log_path)
+        (flag, pkg_path) = self.__build_pkgs_update(bsp_path, pkg, pkg_ver, log_path, flag)
         flag = self.__build_scons(bsp_path, tools, log_path, flag)
         os.rename(log_path, log_path + '-' + flag + '.txt')
         print('mv ' + log_path + ' ' + log_path + '-' + flag + '.txt')
@@ -426,7 +445,7 @@ class Build:
                         if os.path.exists(bsp_path_new):
                             shutil.rmtree(bsp_path_new)
                         shutil.copytree(bsp_path, bsp_path_new)
-                        t = threading.Thread(target=self.__build, args=(bsp_path_new, pkg['enable'], pkg_ver['enable'], self.config.get_path(bsp['toolchain']),log_path))
+                        t = threading.Thread(target=self.__build, args=(bsp_path_new, pkg, pkg_ver, self.config.get_path(bsp['toolchain']),log_path))
                         threads.append(t)
                         self.sem_total.acquire()
                         t.start()
