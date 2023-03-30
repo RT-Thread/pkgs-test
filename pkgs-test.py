@@ -145,10 +145,12 @@ class Config:
         archive.close()
         self.__move(dst_dir)
 
-    def __download(self, url, path):
+    def __download(self, url, path, name=''):
         if not os.path.exists(path):
             os.makedirs(path)
-        fname = os.path.join(path, os.path.basename(url))
+        if not name:
+            name = os.path.basename(url)
+        fname = os.path.join(path, name)
         if os.path.isfile(fname):
             print(fname + " Already exists!!")
         else:
@@ -162,9 +164,19 @@ class Config:
                 resource[1](self.__download(ver['url'], 'download'), ver['path'])
 
     def __get_env(self):
-        os.chdir(self.config_data['rtthread'][0]['path'])
-        os.system('python3 -c "import tools.menuconfig; tools.menuconfig.touch_env()"')
-        os.chdir(self.root)
+        env = self.config_data['env']
+        env_resources = [['packages','packages/packages'],['env','tools/scripts']]
+        if 'url' in env and not os.path.isdir(env['path']):
+            for url in env['url']:
+                for name in env_resources:
+                    if name[0] in url:
+                        path = os.path.join(env['path'],name[1])
+                        self.__unzip(self.__download(url, 'download', name[0]), path)
+        with open(os.path.join(env['path'], 'packages/Kconfig'), 'w') as f:
+            f.write('source "$PKGS_DIR/packages/Kconfig"')
+        path = os.path.join(env['path'], 'local_pkgs')
+        if not os.path.exists(path):
+            os.makedirs(path)
     
     def get_resources(self):
         for resource in self.resources:
@@ -172,10 +184,16 @@ class Config:
         self.__get_env()
     
     def get_path(self, name):
+        if name in "env":
+            path = self.config_data['env']['path']
         for resource in self.resources:
             for _list in self.config_data[resource[0]]:
                 if _list['name'] == name:
-                    return os.path.join(_list['path'], 'bin')
+                    path = os.path.join(_list['path'], 'bin')
+        if os.path.isabs(path):
+            return os.path.isabs(path)
+        else:
+            return os.path.join(self.root, path)
 
     def get_pkgs_name(self, pkg=[]):
         if pkg:
@@ -279,6 +297,7 @@ class Build:
         f.close()
         if not os.path.exists(os.path.dirname(log_path)):
             os.makedirs(os.path.dirname(log_path))
+        os.environ['ENV_ROOT'] = self.config.get_path('env')
         command = '(cd ' + bsp_path + ' && scons --pyconfig-silent)'
         print(command)
         ret = os.system(command + ' > ' + log_path + ' 2>&1')
@@ -294,7 +313,7 @@ class Build:
         if (re.compile(pkg_name + '=').search(text) is None) or (re.compile(pkg_ver + '=').search(text) is None):
             flag = 'Invalid'
         if flag == 'Success':
-            command = '(cd ' + bsp_path + ' && ~/.env/tools/scripts/pkgs --update)'
+            command = '(cd ' + bsp_path + ' && python ' + os.path.join(self.config.get_path('env'), 'tools/scripts/env.py') + ' package --update)'
             print(command)
             ret = os.system(command + ' >> ' + log_path + ' 2>&1')
             if ret == 0:
@@ -316,7 +335,7 @@ class Build:
             if 'stm32' in bsp_path:
                 self.sem_stm32.acquire()
             os.environ['RTT_CC'] = 'gcc'
-            os.environ['RTT_EXEC_PATH'] = os.path.join(self.root, tools)
+            os.environ['RTT_EXEC_PATH'] = tools
             command = 'scons -j16'
             print(bsp_path + ' ' + command)
             ret = os.system(command + ' -C ' + bsp_path + ' >> ' + log_path + ' 2>&1')
@@ -479,7 +498,7 @@ if __name__ == '__main__':
     print(pkgs_name)
     config.get_resources()
 
-    packages_index = PackagesIndex(os.path.join(os.environ['HOME'], '.env/packages/packages'))
+    packages_index = PackagesIndex(os.path.join(config.get_path('env'),'packages/packages'))
     packages_index.nolatest(args.nolatest)
     pkgs_config_dict = packages_index.name_seek(pkgs_name)
     print(pkgs_config_dict)
