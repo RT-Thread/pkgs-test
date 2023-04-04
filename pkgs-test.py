@@ -88,6 +88,9 @@ class PackagesIndex:
     def repository_seek(self, repository):
         pkgs = []
         repository_name = os.path.basename(repository)
+        if repository_name == 'packages':
+            change = Change(os.path.join(Config().get_path('env'),"packages/packages"))
+            return self.name_seek(change.get_change_pkg_name())
         for pkg in self.dict:
             if repository_name.lower() in pkg['repository'].lower():
                 pkgs.append(pkg)
@@ -176,11 +179,11 @@ class Config:
     def __get_env(self):
         env = self.config_data['env']
         env_resources = [['packages','packages/packages'],['env','tools/scripts']]
-        if 'url' in env and not os.path.isdir(env['path']):
+        if 'url' in env:
             for url in env['url']:
                 for name in env_resources:
-                    if name[0] in url:
-                        path = os.path.join(env['path'],name[1])
+                    path = os.path.join(env['path'],name[1])
+                    if name[0] in url and not os.path.isdir(path):
                         self.__unzip(self.__download(url, 'download', name[0]), path)
         with open(os.path.join(env['path'], 'packages/Kconfig'), 'w') as f:
             f.write('source "$PKGS_DIR/packages/Kconfig"')
@@ -338,7 +341,7 @@ class Build:
                     flag = 'Success'
                     pkg_path = name
                     break
-        if 'VER_SHA' in pkg_ver and 'URL' in pkg_ver:
+        if pkg_path and 'VER_SHA' in pkg_ver and 'URL' in pkg_ver:
             path = os.path.join(bsp_path, 'packages', pkg_path)
             shutil.rmtree(path)
             clone_cmd = '(git clone ' + pkg_ver['URL'] + ' ' + path + ')'
@@ -476,6 +479,48 @@ class Build:
                     shutil.rmtree(err['bsp'])
             os.remove(verify)
 
+
+class Change:
+    def __init__(self, packages_path, rtt_repo='https://github.com/RT-Thread/packages', rtt_branch='master'):
+        self.root = os.getcwd()
+        self.packages_path = packages_path
+        self.rtt_repo = rtt_repo
+        self.rtt_branch = rtt_branch
+    
+    def duplicate_removal(self, arr):
+        return list(set(arr))
+
+    def get_change_pkg_name(self):
+        shell = 'cd '+ self.packages_path + ' && '
+        try:
+            os.system(shell + 'git remote add rtt_repo {}'.format(self.rtt_repo))
+        except Exception as e:
+            logging.error(e)
+        try:
+            os.system(shell + 'git fetch rtt_repo')
+            os.system(shell + 'git merge rtt_repo/{}'.format(self.rtt_branch))
+            os.system(shell + 'git reset rtt_repo/{} --soft'.format(self.rtt_branch))
+            os.system(shell + 'git status > git.txt')
+        except Exception as e:
+            logging.error(e)
+            return None
+        try:
+            with open(os.path.join(self.packages_path, 'git.txt'), 'r') as f:
+                file_lines = f.read()
+                pattern = re.compile('(?:modified:|new file:|->)(?:\s*?)(\S*?)(?:Kconfig|package.json)', re.I)
+                print(pattern.findall(file_lines))
+                pkgs = list()
+                for path in pattern.findall(file_lines):
+                    package_path = os.path.join(self.packages_path, path, 'package.json')
+                    if os.access(package_path, os.R_OK):
+                        with open(package_path, 'rb') as f:
+                            data = json.load(f)
+                            if 'name' in data:
+                                pkgs.append(data['name'])
+                return self.duplicate_removal(pkgs)
+        except Exception as e:
+            logging.error(e)
+            return None
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
