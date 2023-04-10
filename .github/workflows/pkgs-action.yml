@@ -19,7 +19,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           PYTHONCMD="__import__('pkgs-test').Config().get_resources();"
-          if [[ ${{ github.repository }} == *'packages'* ]]; \
+          if [[ ${{ github.repository }} == *'/packages'* ]]; \
           then cd .. && mkdir packages_temp && cp packages -R packages_temp && mv packages_temp packages/packages && cd packages; \
           PYTHONCMD="import shutil; import os; config = __import__('pkgs-test').Config(); \
           shutil.move('../packages', os.path.join(config.get_path('env'),'packages'));\
