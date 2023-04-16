@@ -211,7 +211,7 @@ class Config:
     def get_pkgs_name(self, pkg=[]):
         if pkg:
             return pkg
-        elif not (self.config_data['pkgs'] == None or self.config_data['pkgs'] == []):
+        elif not (self.config_data['pkgs'] is None or self.config_data['pkgs'] == []):
             return list(self.config_data['pkgs'])
         return []
     def get_config_data(self):
