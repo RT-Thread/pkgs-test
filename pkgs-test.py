@@ -12,6 +12,7 @@ from datetime import datetime
 import re
 from HTMLTable import HTMLTable
 import html
+import logging
 
 class PackagesIndex:
     def __init__(self, packages_path):
