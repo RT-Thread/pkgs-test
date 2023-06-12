@@ -4,3 +4,5 @@ download
 rtthread
 local_pkgs
 error.json
+*.DS_Store
+env

@@ -109,6 +109,7 @@ class PackagesIndex:
         for pkg in pkgs[0]['pkg']:
             if 'URL' in pkg:
                 pkg['URL'] = 'https://github.com/' + repository + '.git'
+
         return pkgs
 
     def name_seek(self, pkgs='all'):
@@ -151,8 +152,9 @@ class Config:
         self.__move(dst_dir)
 
     def __bz2(self, bz2_src, dst_dir):
+        print('extract' + bz2_src)
         archive = tarfile.open(bz2_src)
-        archive.debug = 1
+        archive.debug = 0
         for tarinfo in archive:
             archive.extract(tarinfo, dst_dir)
         archive.close()
@@ -195,7 +197,30 @@ class Config:
         for resource in self.resources:
             self.__get_resource(resource)
         self.__get_env()
-    
+
+    def action_get_resources(self, rtthread_versions):
+        # rtthread_versions is a string (separated by spaces).
+        # branch "branch:master" tag "tag:v4.1.1"
+        # e.g. "branch:master tag:v4.1.1 "
+        self.config_data['rtthread'] = []
+        versions = rtthread_versions.split()
+        for version in versions:
+            if 'branch:' in version:
+                version = version.replace("branch:", "")
+                self.config_data['rtthread'].append({
+                    "name": version,
+                    "path": "rtthread/" + version,
+                    "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/heads/" + version})
+            elif 'tag:' in version:
+                version = version.replace("tag:", "")
+                self.config_data['rtthread'].append({
+                    "name": version,
+                    "path": "rtthread/" + version,
+                    "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
+        for resource in self.resources:
+            self.__get_resource(resource)
+        self.__get_env()
+
     def get_path(self, name):
         if name in "env":
             path = self.config_data['env']['path']
@@ -318,7 +343,7 @@ class Build:
             return 'Success'
         else:
             return 'Failure'
-
+        
     def __build_pkgs_update(self, bsp_path, pkg, pkg_ver, log_path, flag):
         f = open(os.path.join(bsp_path, '.config'))
         text = f.read()

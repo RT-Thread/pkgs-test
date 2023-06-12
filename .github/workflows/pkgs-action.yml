@@ -1,7 +1,21 @@
 name: RT-Thread_Packages_Test
 
 on:
-  workflow_call
+  workflow_call:
+    inputs:
+      rt-thread-versions:
+        description: "String containing the versions of RT-thread (separated by spaces)."
+        default: "branch:master tag:v4.1.1"
+        required: false
+        type: string
+      repository:
+        default: "RT-Thread/pkgs-test"
+        required: false
+        type: string
+      branch:
+        default: "main"
+        required: false
+        type: string
 
 jobs:
   packages-test:
@@ -9,6 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        with:
+          repository: '${{ inputs.repository }}'
+          ref: '${{ inputs.branch }}'
+          path: pkgs-test
       - name: Install Tools
         shell: bash 
         run: |
@@ -18,24 +37,27 @@ jobs:
         shell: bash 
         run: |
           cd ${{ github.workspace }}
-          PYTHONCMD="__import__('pkgs-test').Config().get_resources();"
-          if [[ ${{ github.repository }} == *'/packages'* ]]; \
-          then cd .. && mkdir packages_temp && cp packages -R packages_temp && mv packages_temp packages/packages && cd packages; \
-          PYTHONCMD="import shutil; import os; config = __import__('pkgs-test').Config(); \
-          shutil.move('../packages', os.path.join(config.get_path('env'),'packages'));\
-          config.get_resources();"; fi
-          git clone https://github.com/RT-Thread/pkgs-test.git
-          cd pkgs-test && python -c "$PYTHONCMD"
+          if [[ ${{ github.repository }} == *'/packages'* ]]; then \
+            cp -r ../packages ../packages_temp; \
+            mkdir -p ./pkgs-test/env; \
+            cp -r ../packages_temp ./pkgs-test/env/packages; \
+          fi
+          cd pkgs-test
+          PYTHONCMD="__import__('pkgs-test').Config().action_get_resources(\"${{ inputs.rt-thread-versions }}\");"
+          python -c "$PYTHONCMD"
       - name: Carry Out Packages Test
-        shell: bash 
+        shell: bash
         run: |
           cd ${{ github.workspace }}/pkgs-test
-          python -c "import os; pkgs_test = __import__('pkgs-test'); config = pkgs_test.Config();\
-          config.get_resources();\
-          packages_index = pkgs_test.PackagesIndex(os.path.join(config.get_path('env'),'packages/packages'));\
-          pkgs_config_dict = packages_index.repository_seek('${{ github.repository }}');\
-          logs = pkgs_test.Logs('artifacts_export', config.get_config_data(), pkgs_config_dict);\
-          build = pkgs_test.Build(config, pkgs_config_dict, logs); build.all();"
+          PYTHONCMD="import os; \
+                      pkgs_test = __import__('pkgs-test'); \
+                      config = pkgs_test.Config(); \
+                      packages_index = pkgs_test.PackagesIndex(os.path.join(config.get_path('env'),'packages/packages')); \
+                      pkgs_config_dict = packages_index.repository_seek('${{ github.repository }}'); \
+                      logs = pkgs_test.Logs('artifacts_export', config.get_config_data(), pkgs_config_dict); \
+                      build = pkgs_test.Build(config, pkgs_config_dict, logs); \
+                      build.all();"
+          python -c "$PYTHONCMD"
       - uses: actions/upload-artifact@v3
         with:
           name: artifacts_export

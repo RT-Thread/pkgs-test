@@ -1,5 +1,22 @@
 # pkgs-test 测试框架
 
+## Github Actions使用
+
+### 用法
+
+```
+jobs:
+  pkgs-test:
+    uses: RT-Thread/pkgs-test/.github/workflows/pkgs-action.yml@main
+    with:
+      # 指定测试的rt-thread内核版本 使用空格分隔
+      # branch "branch:[branch]" tag "tag:[tag]"
+      # e.g. "branch:master tag:v4.1.1"
+      # 默认值为 "branch:master tag:v4.1.1"
+      rt-thread-versions: "branch:master tag:v4.1.1"
+```
+
+## 本地使用
 注意事项：
 1. 本测试框架暂时只使用在 linux 电脑上，不支持 Windows，但 Windows 的 wsl2 暂时测试通过，但不排除有什么隐藏问题
 2. 本测试框架使用 gcc 进行编译，不支持 gcc 的 bsp 将不会通过测试
@@ -20,13 +37,13 @@ pip install scons requests tqdm wget html-table
 
 `-j` 同时编译的作业数量。默认 16
 
-## 用户使用
+### 用户使用
 
 1. 可直接使用 python3 pkgs-test.py 执行 config.json 中的配置文件来进行默认 hello 软件包的测试
 2. 用户也可更改 config.json 文件中的 pkgs 字段来测试其他软件包
 3. 也可通过 --config 指定一个配置文件进行测试
 
-## 针对于不同使用用户所使用的的测试命令
+### 针对于不同使用用户所使用的的测试命令
 - 软件包开发者：测试软件包所支持的 bsp、rtt 版本
   - 软件包版本发布测试
     - 可以对指定软件包版本，进行所支持的 bsp、rtt 版本测试
@@ -51,7 +68,7 @@ pip install scons requests tqdm wget html-table
             python3 pkgs-test.py
         ```
 
-## 部分示例
+### 部分示例
 
 1. 只测试 hello 的 v1.0.0 版本
     ```shell
