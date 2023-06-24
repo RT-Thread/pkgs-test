@@ -6,3 +6,5 @@ local_pkgs
 error.json
 *.DS_Store
 env
+verify.json
+

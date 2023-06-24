@@ -43,36 +43,47 @@ on:
         default: ""
         required: false
         type: string
+      check-errors:
+        description: "Choose whether to check for errors."
+        default: true
+        required: false
+        type: boolean
+      test-all-packages:
+        description: "Choose whether to check for all packages."
+        default: false
+        required: false
+        type: boolean
+      deploy-pages:
+        description: "Choose whether to deploy pages."
+        default: false
+        required: false
+        type: boolean
 jobs:
   packages-test:
     name: ${{ github.repository }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - uses: actions/checkout@v3
         with:
           repository: '${{ inputs.pkgs-test-repository }}'
           ref: '${{ inputs.pkgs-test-branch }}'
           path: pkgs-test
-
       - name: Install Tools
         shell: bash 
         run: |
           sudo apt install python3 python3-pip gcc git libncurses5-dev -y
-          python3 -m pip install scons==4.4.0 requests tqdm wget html-table
-
+          python3 -m pip install scons==4.4.0 requests tqdm wget html-table PyGithub
       - name: Install Test Resources for package
         if: "${{ endsWith(github.repository, '/packages') == false }}"
         shell: bash 
         run: |
           cd ${{ github.workspace }}/pkgs-test
-
-          python -c "pkgs_test = __import__('pkgs-test'); \
+          PYTHONCMD="pkgs_test = __import__('pkgs-test'); \
                     config = pkgs_test.Config(); \
                     config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
                     config.get_resources();"
-
+          python -c "$PYTHONCMD"
       - name: Install Test Resources for RT-Thread/packages
         if: "${{ endsWith(github.repository, '/packages') == true }}"
         shell: bash 
@@ -82,11 +93,11 @@ jobs:
           mkdir -p ./pkgs-test/env; \
           cp -r ../packages_temp ./pkgs-test/env/packages; \
           cd pkgs-test
-          python -c "pkgs_test = __import__('pkgs-test'); \
+          PYTHONCMD="pkgs_test = __import__('pkgs-test'); \
                     config = pkgs_test.Config(); \
                     config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
                     config.get_resources();"
-
+          python -c "$PYTHONCMD"
       - name: Carry Out Packages Test
         shell: bash
         run: |
@@ -100,24 +111,23 @@ jobs:
                       pkgs_config_dict = packages_index.repository_seek('${{ inputs.package-repository }}','${{ inputs.package-version }}'); \
                       logs = pkgs_test.Logs('artifacts_export', config.get_config_data(), pkgs_config_dict); \
                       build = pkgs_test.Build(config, pkgs_config_dict, logs); \
-                      build.build_config('${{ inputs.build-config }}'); \
+                      build.build_config('${{ inputs.package-repository }}', '${{ inputs.build-config }}'); \
                       build.all();"
           python -c "$PYTHONCMD"
-
       - uses: actions/upload-artifact@v3
         with:
           name: artifacts_export
           path: ${{ github.workspace }}/pkgs-test/artifacts_export
-          
+      
   check-errors:
     runs-on: ubuntu-latest
     needs: packages-test
+    if: "${{ inputs.check-errors }}"
     steps:
       - name: Download artifacts_export
         uses: actions/download-artifact@v3
         with:
           name: artifacts_export
-
       - name: Packages test whether or not error
         shell: bash 
         run: |
@@ -126,3 +136,26 @@ jobs:
           str2="#f00"
           if [[ $str1 == *$str2* ]]; then echo "Software package test failed." && exit 1;\
           else echo "Software package test success.";fi
+
+  Deploy-Pages:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: packages-test
+    if: "${{ endsWith(github.repository, '/packages') == true && inputs.deploy-pages }}"
+    steps:
+      - name: Download artifacts_export
+        uses: actions/download-artifact@v3
+        with:
+          name: artifacts_export
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          # Upload entire repository
+          path: '.'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2

@@ -143,7 +143,16 @@ class Config:
         with open(self.config_file, 'rb') as f:
             data = json.load(f)
             return data
-
+    
+    def __get_all_rtthread_versions(self):
+        from github import Github
+        repo = Github().get_repo("RT-Thread/rt-thread")
+        tags = repo.get_tags()
+        tags_name_list = []
+        for tag in tags:
+            tags_name_list.append(tag.name)
+        return tags_name_list
+    
     def __move(self, path):
         if len(os.listdir(path)) == 1:
             root = os.path.join(path, os.listdir(path)[0])
@@ -213,6 +222,19 @@ class Config:
             bsp = {}
             [bsp['name'], bsp['toolchain']] = bsp_str.split(":")
             self.config_data['bsps'].append(bsp)
+            
+    def config_set_all_rtthread_versions(self):
+        self.config_data['rtthread'] = []
+        self.config_data['rtthread'].append({
+            "name": "master",
+            "path": "rtthread/master",
+            "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/heads/master"})
+        versions = self.__get_all_rtthread_versions()
+        for version in versions:
+            self.config_data['rtthread'].append({
+                "name": version,
+                "path": "rtthread/" + version,
+                "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
 
     def config_rtthread_versions(self, rtthread_versions):
         # rtthread_versions is a string (separated by spaces).
@@ -311,7 +333,8 @@ class Logs:
         data = self.config_data
         pkgs_rows = ['']
         for pkg in self.pkgs_index:
-            pkgs_rows.append(pkg['name'])
+            link = '<a href="' + pkg['repository'] + '">' + pkg['name'] + '</a>'
+            pkgs_rows.append(link)
         for rtthread in data['rtthread']:
             table = HTMLTable(caption=rtthread['name'])
             table.append_header_rows((pkgs_rows,))
@@ -348,13 +371,20 @@ class Build:
         self.logs_path = logs.path()
         self.root = os.getcwd()
         self.__debug = False
-        self.build_config_str = ''
+        self.build_config_dict = self.__load_rt_thread_settings('rt-thread-settings.json')
 
+    def __load_rt_thread_settings(self, path):
+        dict = {}
+        with open(path, 'rb') as f:
+            dict = json.load(f)
+        return dict
+    
     def __build_pyconfig(self, bsp_path, pkg, pkg_ver, log_path):
         print('build', bsp_path, pkg['name'], pkg_ver['version'])
         f = open(os.path.join(bsp_path, '.config'),'a')
         f.write('\nCONFIG_' + pkg['enable'] + '=y\nCONFIG_' + pkg_ver['enable'] + '=y\n')
-        f.write('\n' + self.build_config_str + '\n')
+        if pkg['name'] in self.build_config_dict:   
+            f.write('\n' + self.build_config_dict[pkg['name']] + '\n')
         f.close()
         if not os.path.exists(os.path.dirname(log_path)):
             os.makedirs(os.path.dirname(log_path))
@@ -477,10 +507,11 @@ class Build:
 
     def debug(self, value=True):
         self.__debug = value
-
-    def build_config(self, build_config_str):
+        
+    def build_config(self, pkg_name, build_config_str):
         build_config_str = build_config_str.replace(" ", "\n")
-        self.build_config_str = build_config_str
+        pkg_name = pkg_name.split("/")[1]
+        self.build_config_dict[pkg_name] = build_config_str
 
     def all(self):
         count = 0
