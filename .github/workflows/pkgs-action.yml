@@ -8,43 +8,85 @@ on:
         default: "branch:master tag:v4.1.1"
         required: false
         type: string
-      repository:
+      rt-thread-repository:
+        description: "RT-Thread repository."
+        default: "RT-Thread/rt-thread"
+        required: false
+        type: string
+      pkgs-test-repository:
+        description: "pkgs-test repository (for pkgs-test debug only)."
         default: "RT-Thread/pkgs-test"
         required: false
         type: string
-      branch:
+      pkgs-test-branch:
+        description: "pkgs-test branch (for pkgs-test debug only)."
         default: "main"
         required: false
         type: string
-
+      bsps:
+        description: "String containing the bsps ([bsp-name]:[toolchain], separated by spaces)."
+        default: "qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm k210:sourcery-riscv-none-embed"
+        required: false
+        type: string
+      package-repository:
+        description: "Package repository to test."
+        default: ${{ github.repository }}
+        required: false
+        type: string
+      package-version:
+        description: "Packages version to test (separated by spaces)."
+        default: "all"
+        required: false
+        type: string
+      build-config:
+        description: "scons config."
+        default: ""
+        required: false
+        type: string
 jobs:
   packages-test:
     name: ${{ github.repository }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions/checkout@v3
         with:
-          repository: '${{ inputs.repository }}'
-          ref: '${{ inputs.branch }}'
+          repository: '${{ inputs.pkgs-test-repository }}'
+          ref: '${{ inputs.pkgs-test-branch }}'
           path: pkgs-test
+
       - name: Install Tools
         shell: bash 
         run: |
           sudo apt install python3 python3-pip gcc git libncurses5-dev -y
           python3 -m pip install scons==4.4.0 requests tqdm wget html-table
-      - name: Install Test Resources
+
+      - name: Install Test Resources for package
+        if: "${{ endsWith(github.repository, '/packages') == false }}"
+        shell: bash 
+        run: |
+          cd ${{ github.workspace }}/pkgs-test
+
+          python -c "pkgs_test = __import__('pkgs-test'); \
+                    config = pkgs_test.Config(); \
+                    config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
+                    config.get_resources();"
+
+      - name: Install Test Resources for RT-Thread/packages
+        if: "${{ endsWith(github.repository, '/packages') == true }}"
         shell: bash 
         run: |
           cd ${{ github.workspace }}
-          if [[ ${{ github.repository }} == *'/packages'* ]]; then \
-            cp -r ../packages ../packages_temp; \
-            mkdir -p ./pkgs-test/env; \
-            cp -r ../packages_temp ./pkgs-test/env/packages; \
-          fi
+          cp -r ../packages ../packages_temp; \
+          mkdir -p ./pkgs-test/env; \
+          cp -r ../packages_temp ./pkgs-test/env/packages; \
           cd pkgs-test
-          PYTHONCMD="__import__('pkgs-test').Config().action_get_resources(\"${{ inputs.rt-thread-versions }}\");"
-          python -c "$PYTHONCMD"
+          python -c "pkgs_test = __import__('pkgs-test'); \
+                    config = pkgs_test.Config(); \
+                    config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
+                    config.get_resources();"
+
       - name: Carry Out Packages Test
         shell: bash
         run: |
@@ -52,12 +94,16 @@ jobs:
           PYTHONCMD="import os; \
                       pkgs_test = __import__('pkgs-test'); \
                       config = pkgs_test.Config(); \
+                      config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
+                      config.action_config_bsps(\"${{ inputs.bsps }}\"); \
                       packages_index = pkgs_test.PackagesIndex(os.path.join(config.get_path('env'),'packages/packages')); \
-                      pkgs_config_dict = packages_index.repository_seek('${{ github.repository }}'); \
+                      pkgs_config_dict = packages_index.repository_seek('${{ inputs.package-repository }}','${{ inputs.package-version }}'); \
                       logs = pkgs_test.Logs('artifacts_export', config.get_config_data(), pkgs_config_dict); \
                       build = pkgs_test.Build(config, pkgs_config_dict, logs); \
+                      build.build_config('${{ inputs.build-config }}'); \
                       build.all();"
           python -c "$PYTHONCMD"
+
       - uses: actions/upload-artifact@v3
         with:
           name: artifacts_export
@@ -71,6 +117,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: artifacts_export
+
       - name: Packages test whether or not error
         shell: bash 
         run: |

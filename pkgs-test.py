@@ -85,9 +85,9 @@ class PackagesIndex:
                         return pkgs_return
         return pkgs_return
 
-    def repository_seek(self, repository):
+    def repository_seek(self, repository, versions='all'):
         pkgs = []
-        repository_name = os.path.basename(repository)
+        repository_name = repository.split("/")[1]
         if repository_name == 'packages':
             change = Change(os.path.join(Config().get_path('env'),"packages/packages"))
             return self.name_seek(change.get_change_pkg_name())
@@ -109,6 +109,15 @@ class PackagesIndex:
         for pkg in pkgs[0]['pkg']:
             if 'URL' in pkg:
                 pkg['URL'] = 'https://github.com/' + repository + '.git'
+
+        versions = versions.strip()
+        if not versions == 'all':
+            versions = versions.split(' ')
+            pkg_temp = []
+            for pkg in pkgs[0]['pkg']:
+                if pkg['version'] in versions:
+                    pkg_temp.append(pkg)
+            pkgs[0]['pkg'] = pkg_temp
 
         return pkgs
 
@@ -133,7 +142,7 @@ class Config:
     def __analysis(self):
         with open(self.config_file, 'rb') as f:
             data = json.load(f)
-            return data;
+            return data
 
     def __move(self, path):
         if len(os.listdir(path)) == 1:
@@ -198,12 +207,22 @@ class Config:
             self.__get_resource(resource)
         self.__get_env()
 
-    def action_get_resources(self, rtthread_versions):
+    def action_config_bsps(self, bsps_str):
+        self.config_data['bsps'] = []
+        for bsp_str in bsps_str.split():
+            bsp = {}
+            [bsp['name'], bsp['toolchain']] = bsp_str.split(":")
+            self.config_data['bsps'].append(bsp)
+
+    def config_rtthread_versions(self, rtthread_versions):
         # rtthread_versions is a string (separated by spaces).
         # branch "branch:master" tag "tag:v4.1.1"
         # e.g. "branch:master tag:v4.1.1 "
+        if isinstance(rtthread_versions, str):
+            versions = rtthread_versions.split()
+        if isinstance(rtthread_versions, list):
+            versions = rtthread_versions
         self.config_data['rtthread'] = []
-        versions = rtthread_versions.split()
         for version in versions:
             if 'branch:' in version:
                 version = version.replace("branch:", "")
@@ -217,9 +236,11 @@ class Config:
                     "name": version,
                     "path": "rtthread/" + version,
                     "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
-        for resource in self.resources:
-            self.__get_resource(resource)
-        self.__get_env()
+            else:
+                self.config_data['rtthread'].append({
+                    "name": version,
+                    "path": "rtthread/" + version,
+                    "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
 
     def get_path(self, name):
         if name in "env":
@@ -327,11 +348,13 @@ class Build:
         self.logs_path = logs.path()
         self.root = os.getcwd()
         self.__debug = False
+        self.build_config_str = ''
 
     def __build_pyconfig(self, bsp_path, pkg, pkg_ver, log_path):
         print('build', bsp_path, pkg['name'], pkg_ver['version'])
         f = open(os.path.join(bsp_path, '.config'),'a')
         f.write('\nCONFIG_' + pkg['enable'] + '=y\nCONFIG_' + pkg_ver['enable'] + '=y\n')
+        f.write('\n' + self.build_config_str + '\n')
         f.close()
         if not os.path.exists(os.path.dirname(log_path)):
             os.makedirs(os.path.dirname(log_path))
@@ -454,6 +477,10 @@ class Build:
 
     def debug(self, value=True):
         self.__debug = value
+
+    def build_config(self, build_config_str):
+        build_config_str = build_config_str.replace(" ", "\n")
+        self.build_config_str = build_config_str
 
     def all(self):
         count = 0
