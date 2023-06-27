@@ -1,5 +1,0 @@
-{
-    "RTduino": "CONFIG_BSP_USING_ARDUINO=y",
-    "at_device": "CONFIG_AT_USING_SOCKET=y"
-}
-

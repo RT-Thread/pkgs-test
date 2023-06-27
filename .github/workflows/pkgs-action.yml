@@ -38,19 +38,9 @@ on:
         default: "all"
         required: false
         type: string
-      build-config:
-        description: "scons config."
-        default: ""
-        required: false
-        type: string
       check-errors:
         description: "Choose whether to check for errors."
         default: true
-        required: false
-        type: boolean
-      test-all-packages:
-        description: "Choose whether to check for all packages."
-        default: false
         required: false
         type: boolean
       deploy-pages:
@@ -111,7 +101,6 @@ jobs:
                       pkgs_config_dict = packages_index.repository_seek('${{ inputs.package-repository }}','${{ inputs.package-version }}'); \
                       logs = pkgs_test.Logs('artifacts_export', config.get_config_data(), pkgs_config_dict); \
                       build = pkgs_test.Build(config, pkgs_config_dict, logs); \
-                      build.build_config('${{ inputs.package-repository }}', '${{ inputs.build-config }}'); \
                       build.all();"
           python -c "$PYTHONCMD"
       - uses: actions/upload-artifact@v3

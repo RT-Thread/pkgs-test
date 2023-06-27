@@ -371,20 +371,11 @@ class Build:
         self.logs_path = logs.path()
         self.root = os.getcwd()
         self.__debug = False
-        self.build_config_dict = self.__load_rt_thread_settings('rt-thread-settings.json')
 
-    def __load_rt_thread_settings(self, path):
-        dict = {}
-        with open(path, 'rb') as f:
-            dict = json.load(f)
-        return dict
-    
     def __build_pyconfig(self, bsp_path, pkg, pkg_ver, log_path):
         print('build', bsp_path, pkg['name'], pkg_ver['version'])
         f = open(os.path.join(bsp_path, '.config'),'a')
         f.write('\nCONFIG_' + pkg['enable'] + '=y\nCONFIG_' + pkg_ver['enable'] + '=y\n')
-        if pkg['name'] in self.build_config_dict:   
-            f.write('\n' + self.build_config_dict[pkg['name']] + '\n')
         f.close()
         if not os.path.exists(os.path.dirname(log_path)):
             os.makedirs(os.path.dirname(log_path))
@@ -507,11 +498,6 @@ class Build:
 
     def debug(self, value=True):
         self.__debug = value
-        
-    def build_config(self, pkg_name, build_config_str):
-        build_config_str = build_config_str.replace(" ", "\n")
-        pkg_name = pkg_name.split("/")[1]
-        self.build_config_dict[pkg_name] = build_config_str
 
     def all(self):
         count = 0
