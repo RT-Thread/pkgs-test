@@ -85,9 +85,9 @@ class PackagesIndex:
                         return pkgs_return
         return pkgs_return
 
-    def repository_seek(self, repository):
+    def repository_seek(self, repository, versions='all'):
         pkgs = []
-        repository_name = os.path.basename(repository)
+        repository_name = repository.split("/")[1]
         if repository_name == 'packages':
             change = Change(os.path.join(Config().get_path('env'),"packages/packages"))
             return self.name_seek(change.get_change_pkg_name())
@@ -109,6 +109,15 @@ class PackagesIndex:
         for pkg in pkgs[0]['pkg']:
             if 'URL' in pkg:
                 pkg['URL'] = 'https://github.com/' + repository + '.git'
+
+        versions = versions.strip()
+        if not versions == 'all':
+            versions = versions.split(' ')
+            pkg_temp = []
+            for pkg in pkgs[0]['pkg']:
+                if pkg['version'] in versions:
+                    pkg_temp.append(pkg)
+            pkgs[0]['pkg'] = pkg_temp
 
         return pkgs
 
@@ -133,8 +142,17 @@ class Config:
     def __analysis(self):
         with open(self.config_file, 'rb') as f:
             data = json.load(f)
-            return data;
-
+            return data
+    
+    def __get_all_rtthread_versions(self):
+        from github import Github
+        repo = Github().get_repo("RT-Thread/rt-thread")
+        tags = repo.get_tags()
+        tags_name_list = []
+        for tag in tags:
+            tags_name_list.append(tag.name)
+        return tags_name_list
+    
     def __move(self, path):
         if len(os.listdir(path)) == 1:
             root = os.path.join(path, os.listdir(path)[0])
@@ -198,12 +216,35 @@ class Config:
             self.__get_resource(resource)
         self.__get_env()
 
-    def action_get_resources(self, rtthread_versions):
+    def action_config_bsps(self, bsps_str):
+        self.config_data['bsps'] = []
+        for bsp_str in bsps_str.split():
+            bsp = {}
+            [bsp['name'], bsp['toolchain']] = bsp_str.split(":")
+            self.config_data['bsps'].append(bsp)
+            
+    def config_set_all_rtthread_versions(self):
+        self.config_data['rtthread'] = []
+        self.config_data['rtthread'].append({
+            "name": "master",
+            "path": "rtthread/master",
+            "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/heads/master"})
+        versions = self.__get_all_rtthread_versions()
+        for version in versions:
+            self.config_data['rtthread'].append({
+                "name": version,
+                "path": "rtthread/" + version,
+                "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
+
+    def config_rtthread_versions(self, rtthread_versions):
         # rtthread_versions is a string (separated by spaces).
         # branch "branch:master" tag "tag:v4.1.1"
         # e.g. "branch:master tag:v4.1.1 "
+        if isinstance(rtthread_versions, str):
+            versions = rtthread_versions.split()
+        if isinstance(rtthread_versions, list):
+            versions = rtthread_versions
         self.config_data['rtthread'] = []
-        versions = rtthread_versions.split()
         for version in versions:
             if 'branch:' in version:
                 version = version.replace("branch:", "")
@@ -217,9 +258,11 @@ class Config:
                     "name": version,
                     "path": "rtthread/" + version,
                     "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
-        for resource in self.resources:
-            self.__get_resource(resource)
-        self.__get_env()
+            else:
+                self.config_data['rtthread'].append({
+                    "name": version,
+                    "path": "rtthread/" + version,
+                    "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
 
     def get_path(self, name):
         if name in "env":
@@ -290,7 +333,8 @@ class Logs:
         data = self.config_data
         pkgs_rows = ['']
         for pkg in self.pkgs_index:
-            pkgs_rows.append(pkg['name'])
+            link = '<a href="' + pkg['repository'] + '">' + pkg['name'] + '</a>'
+            pkgs_rows.append(link)
         for rtthread in data['rtthread']:
             table = HTMLTable(caption=rtthread['name'])
             table.append_header_rows((pkgs_rows,))
