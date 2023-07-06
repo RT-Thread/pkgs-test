@@ -62,7 +62,7 @@ jobs:
       - name: Install Tools
         shell: bash 
         run: |
-          sudo apt install python3 python3-pip gcc git libncurses5-dev -y
+          sudo apt install python3 python3-pip gcc git libncurses5-dev tree -y
           python3 -m pip install scons==4.4.0 requests tqdm wget html-table PyGithub
       - name: Install Test Resources for package
         if: "${{ endsWith(github.repository, '/packages') == false }}"
@@ -83,6 +83,7 @@ jobs:
           mkdir -p ./pkgs-test/env; \
           cp -r ../packages_temp ./pkgs-test/env/packages; \
           cd pkgs-test
+          tree
           PYTHONCMD="pkgs_test = __import__('pkgs-test'); \
                     config = pkgs_test.Config(); \
                     config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
