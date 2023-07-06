@@ -126,6 +126,7 @@ class PackagesIndex:
             config_dict = self.dict
         else:
             config_dict = self.__get_config_pkgs(pkgs)
+        print(config_dict)
         return config_dict
 
     def nolatest(self, value=True):
@@ -567,9 +568,10 @@ class Change:
             logging.error(e)
         try:
             os.system(shell + 'git fetch rtt_repo')
-            os.system(shell + 'git merge rtt_repo/{}'.format(self.rtt_branch))
+            os.system(shell + 'git merge rtt_repo/{} --allow-unrelated-histories'.format(self.rtt_branch))
             os.system(shell + 'git reset rtt_repo/{} --soft'.format(self.rtt_branch))
-            os.system(shell + 'git status > git.txt')
+            os.system(shell + 'git status | tee git.txt')
+            os.system(shell + 'git diff --staged | cat')
         except Exception as e:
             logging.error(e)
             return None
