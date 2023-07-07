@@ -11,6 +11,7 @@ import wget
 from datetime import datetime
 import re
 import pytz
+import requests
 from dominate.tags import div, head, style, html, body, p, tr, th, table, td, a, h1, h2, h3
 
 
@@ -301,7 +302,9 @@ class Logs:
         self.pkgs_index = pkgs_index
         self.master_is_tab = False
         self.__clear_logs_path()
-        self.pkgs_res_json = {}
+        self.pkgs_res_dict = {}
+        self.append_res = False
+        self.pages_url = 'http://rt-thread.github.io/packages/'
 
     def __clear_logs_path(self):
         if os.path.isdir(self.logs_path):
@@ -309,6 +312,16 @@ class Logs:
         os.makedirs(self.logs_path)
 
     def __build_res(self):
+        def download_old_res():
+            res_old_url = self.pages_url + 'pkgs_res.json'
+            try:
+                response = requests.get(res_old_url)
+                res_old_dict = response.json()
+                return res_old_dict
+            except Exception as e:
+                print(e)
+            return {}
+
         def check_logfile(log_file):
             pattern = re.compile('Failure|Invalid|Success')
             if not (pattern.search(log_file) is None):
@@ -329,20 +342,21 @@ class Logs:
                         return log_file
             return ''
 
-        def get_single_pkg_res(pkgs, rtthread_name, bsp_name, pkg_name):
-            pkg_res = []
-            for pkg_version in pkgs:
+        def get_pkg_res(pkg, rtthread_name, bsp_name):
+            pkg_res = {}
+            pkg_res['pkg'] = pkg['name']
+            pkg_res['repository'] = pkg['repository']
+            pkg_res['versions'] = []
+            for pkg_version in pkg['pkg']:
                 res = {}
                 res['version'] = pkg_version['version']
                 res['log_file'] = get_log_file(
-                    pkg_version['version'], rtthread_name, bsp_name, pkg_name)
+                    pkg_version['version'], rtthread_name, bsp_name, pkg['name'])
                 res['res'] = check_logfile(res['log_file'])
-                pkg_res.append(res)
-            return pkg_res
+                pkg_res['versions'].append(res)
 
-        def check_pkg(pkgs, pkg_res, rtthread_name):
             error_flag = False
-            if len(pkgs) == 1 and pkgs[0]['version'] == 'latest':
+            if len(pkg['pkg']) == 1 and pkg['pkg'][0]['version'] == 'latest':
                 error_flag = True
             for res in pkg_res['versions']:
                 if 'Failure' == res['res'] and 'latest' != res['version']:
@@ -350,39 +364,36 @@ class Logs:
             if error_flag and (('master' == rtthread_name
                                 and self.master_is_tab)
                                or 'master' != rtthread_name):
-                return True
-            return False
+                pkg_res['error'] = True
+            else:
+                pkg_res['error'] = False
+            return pkg_res
 
-        pkgs_res_json = {}
+        if self.append_res:
+            pkgs_res_dict = download_old_res()
+        else:
+            pkgs_res_dict = {}
+        print(pkgs_res_dict)
+        for rtthread in self.config_data['rtthread']:
+            if 'pkgs_res' not in pkgs_res_dict:
+                pkgs_res_dict['pkgs_res'] = {}
+            for rtthread in self.config_data['rtthread']:
+                if rtthread['name'] not in pkgs_res_dict['pkgs_res']:
+                    pkgs_res_dict['pkgs_res'][rtthread['name']] = {}
+                for bsp in self.config_data['bsps']:
+                    if bsp['name'] not in pkgs_res_dict['pkgs_res'][rtthread['name']]:
+                        pkgs_res_dict['pkgs_res'][rtthread['name']
+                                                  ][bsp['name']] = {}
+                    for pkg in self.pkgs_index:
+                        pkgs_res_dict['pkgs_res'][rtthread['name']][bsp['name']][pkg['name']] = get_pkg_res(
+                            pkg, rtthread['name'], bsp['name'])
 
         timezone = pytz.timezone('Asia/Shanghai')
         localized_time = timezone.localize(datetime.now())
-        pkgs_res_json['last_run_time'] = localized_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
-        pkgs_res = []
-        for rtthread in self.config_data['rtthread']:
-            rtthread_res = {}
-            rtthread_res['rtthread'] = rtthread['name']
-            rtthread_res['bsps'] = []
-            for bsp in self.config_data['bsps']:
-                bsp_res = {}
-                bsp_res['bsp'] = bsp['name']
-                bsp_res['pkgs'] = []
-                for pkg in self.pkgs_index:
-                    pkg_res = {}
-                    pkg_res['pkg'] = pkg['name']
-                    pkg_res['repository'] = pkg['repository']
-                    pkg_res['versions'] = get_single_pkg_res(pkg['pkg'],
-                                                             rtthread['name'],
-                                                             bsp['name'],
-                                                             pkg['name'])
-                    pkg_res['error'] = check_pkg(pkg['pkg'],
-                                                 pkg_res,
-                                                 rtthread['name'])
-                    bsp_res['pkgs'].append(pkg_res)
-                rtthread_res['bsps'].append(bsp_res)
-            pkgs_res.append(rtthread_res)
-        pkgs_res_json['pkgs_res'] = pkgs_res
-        return pkgs_res_json
+        pkgs_res_dict['last_run_time'] = localized_time.strftime(
+            '%Y-%m-%d %H:%M:%S %Z%z')
+
+        return pkgs_res_dict
 
     def __html_report(self):
         style_applied = '''
@@ -456,8 +467,8 @@ class Logs:
 
         def get_success_pkg_num(pkgs):
             success_pkg_num = 0
-            for pkg in pkgs:
-                for version in pkg['versions']:
+            for pkg_name, pkg_res in pkgs.items():
+                for version in pkg_res['versions']:
                     if version['version'] == 'latest' and version['res'] == 'Success':
                         success_pkg_num = success_pkg_num + 1
             return success_pkg_num
@@ -465,43 +476,33 @@ class Logs:
         def generate_result_table():
             result_div = div(id='pkgs_test_result')
             result_div.add(h1('Packages Test Result'))
-            result_div.add(p('Last run at: ' + self.pkgs_res_json['last_run_time']))
-            
-            for rtthread in self.pkgs_res_json['pkgs_res']:
-                result_div = div(id='pkgs_test_result_' + rtthread['rtthread'])
+            result_div.add(
+                p('Last run at: ' + self.pkgs_res_dict['last_run_time']))
+            for rtthread_name, rtthread_res in self.pkgs_res_dict['pkgs_res'].items():
+                result_div = div(id='pkgs_test_result_' + rtthread_name)
                 result_div.add(
-                    h2('RT-Thread Version: ' + rtthread['rtthread']))
-
-                for bsp in rtthread['bsps']:
-                    result_div.add(h3("bsp: {bsp}".format(bsp=bsp['bsp'])))
-
-                    pkgs_num = len(bsp['pkgs'])
-                    success_num = get_success_pkg_num(bsp['pkgs'])
+                    h2('RT-Thread Version: ' + rtthread_name))
+                for bsp_name, bsp_res in rtthread_res.items():
+                    result_div.add(h3("bsp: {bsp}".format(bsp=bsp_name)))
+                    pkgs_num = len(bsp_res)
+                    success_num = get_success_pkg_num(bsp_res)
                     result_div.add(
                         p("{pkgs_num} packages in total, {success_num} packages pass the test. ({success_num}/{pkgs_num})".format(
                             pkgs_num=pkgs_num,
                             success_num=success_num)))
-
                     result_div.add(p("problem packages: "))
-                    for pkg in bsp['pkgs']:
-                        for version in pkg['versions']:
+                    for pkg_name, pkg_res in bsp_res.items():
+                        for version in pkg_res['versions']:
                             if version['version'] == 'latest' and version['res'] != 'Success':
                                 result_div.add(
-                                    p(a(pkg['pkg'], href=pkg['repository'])))
+                                    p(a(pkg_name, href=pkg_res['repository'])))
 
                 rtthread_result_table = table(cls='gridtable')
-                rtthread_result_table.add(th("bsp"))
-                if rtthread['bsps']:
-                    pkgs_num = len(rtthread['bsps'][0]['pkgs'])
-                else:
-                    pkgs_num = 0
-                rtthread_result_table.add(
-                    th("pkgs", colspan=pkgs_num))
-                for bsp in rtthread['bsps']:
+                for bsp_name, bsp_res in rtthread_res.items():
                     bsp_tr = tr()
-                    bsp_tr += td(bsp['bsp'])
-                    for pkg in bsp['pkgs']:
-                        bsp_tr += td(generate_pkg_result_table(pkg))
+                    bsp_tr += td(bsp_name)
+                    for pkg_name, pkg_res in bsp_res.items():
+                        bsp_tr += td(generate_pkg_result_table(pkg_res))
                     rtthread_result_table.add(bsp_tr)
 
         html_root = html()
@@ -515,9 +516,9 @@ class Logs:
         self.master_is_tab = tab
 
     def logs(self):
-        self.pkgs_res_json = self.__build_res()
+        self.pkgs_res_dict = self.__build_res()
         with open(os.path.join(self.logs_path, 'pkgs_res.json'), 'w') as f:
-            json.dump(self.pkgs_res_json, f)
+            json.dump(self.pkgs_res_dict, f)
 
         logs_html = self.__html_report()
         with open(os.path.join(self.logs_path, 'index.html'), 'w') as f:
@@ -749,8 +750,10 @@ class Change:
             logging.error(e)
         try:
             os.system(shell + 'git fetch rtt_repo')
-            os.system(shell + 'git merge rtt_repo/{} --allow-unrelated-histories'.format(self.rtt_branch))
-            os.system(shell + 'git reset rtt_repo/{} --soft'.format(self.rtt_branch))
+            os.system(
+                shell + 'git merge rtt_repo/{} --allow-unrelated-histories'.format(self.rtt_branch))
+            os.system(
+                shell + 'git reset rtt_repo/{} --soft'.format(self.rtt_branch))
             os.system(shell + 'git status | tee git.txt')
             os.system(shell + 'git diff --staged | cat')
         except Exception as e:
@@ -782,16 +785,17 @@ class Check:
         pass
 
     def check_errors(self, res_json_path='pkgs_res.json'):
-        pkgs_res_json = {}
+        pkgs_res = {}
         with open(res_json_path, 'rb') as f:
-            pkgs_res_json = json.load(f)
+            pkgs_res = json.load(f)
 
-        for rtthread in pkgs_res_json['pkgs_res']:
-            for bsp in rtthread['bsps']:
-                for pkg in bsp['pkgs']:
-                    if pkg['error']:
+        for rtthread_name, rtthread_res in pkgs_res['pkgs_res'].items():
+            for bsp_name, bsp_res in rtthread_res.items():
+                for pkg_name, pkg_res in bsp_res.items():
+                    if pkg_res['error']:
                         return True
         return False
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -823,7 +827,13 @@ if __name__ == '__main__':
     parser.add_argument('--repository', action='store',
                         help='Repository name to seek.',
                         default='')
-    
+    parser.add_argument('--append_res', action='store_true',
+                        help='Append test tes to old res from githubpage.',
+                        default=False)
+    parser.add_argument('--pages_url', action='store',
+                        help='Pkgs test res github pages url.',
+                        default='')
+
     subparsers = parser.add_subparsers(dest='command')
 
     parser_check = subparsers.add_parser(name='check',
@@ -844,10 +854,10 @@ if __name__ == '__main__':
                                help='config the bsps (separated by spaces).',
                                default='')
     parser_download = subparsers.add_parser(name='download',
-                                          help='Download resources by config.json.')
+                                            help='Download resources by config.json.')
     parser_download.add_argument('-f', '--file',
-                               help='Input file config.json path.',
-                               default='config.json')
+                                 help='Input file config.json path.',
+                                 default='config.json')
     args = parser.parse_args()
 
     if args.command == 'check':
@@ -892,7 +902,13 @@ if __name__ == '__main__':
 
         print(pkgs_config_dict)
 
-        logs = Logs('artifacts_export', config.get_config_data(), pkgs_config_dict)
+        logs = Logs('artifacts_export',
+                    config.get_config_data(), pkgs_config_dict)
+        if args.append_res:
+            if args.pages_url:
+                logs.pages_url = args.pages_url
+            logs.append_res = True
+
         build = Build(config, pkgs_config_dict, logs, args.j)
 
         build.debug(args.debug)
@@ -905,4 +921,4 @@ if __name__ == '__main__':
         time_new = datetime.now()
         print(time_new-time_old)
         print('Please via browser open ' + os.path.join(os.getcwd(),
-            'artifacts_export/index.html') + ' view results!!')
+                                                        'artifacts_export/index.html') + ' view results!!')

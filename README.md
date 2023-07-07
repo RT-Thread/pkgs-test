@@ -4,16 +4,44 @@
 
 ### 用法
 
-```
+``` yml
 jobs:
   pkgs-test:
     uses: RT-Thread/pkgs-test/.github/workflows/pkgs-action.yml@main
     with:
       # 指定测试的rt-thread内核版本 使用空格分隔
       # branch "branch:[branch]" tag "tag:[tag]"
-      # e.g. "branch:master tag:v4.1.1"
       # 默认值为 "branch:master tag:v4.1.1"
       rt-thread-versions: "branch:master tag:v4.1.1"
+
+      # 指定测试的bsp 使用空格分隔
+      # [bsp]:[toolchain]
+      # 默认值为 "qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm k210:sourcery-riscv-none-embed"
+      bsps: "qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm k210:sourcery-riscv-none-embed"
+      
+      # 测试package时是否测试latest版本，false时测试latest版本。
+      # 默认值为 false
+      package-test-nolatest: false
+      
+      # 测试全部的package，true为测试全部。
+      # 默认值为 false
+      package-test-all: false
+
+      # 是否执行check-errors，true为检查。
+      # 默认值为 true
+      check-errors: true
+
+      # 是否从githubpages下载旧的测试结果，并将新的测试结果与其合并，true为下载并合并。
+      # 默认值为 false
+      package-append-res: false
+
+      # 旧测试结果的githubpages地址。
+      # 默认值为 https://rt-thread.github.io/packages/
+      pages-url: https://rt-thread.github.io/packages/
+
+      # 是否将测试结果发布到githubpages，true是发布。
+      # 默认值为 false
+      deploy-pages: false
 ```
 
 ## 本地使用

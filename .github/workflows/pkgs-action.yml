@@ -43,11 +43,21 @@ on:
         default: false
         required: false
         type: boolean
+      package-append-res:
+        description: "Append test res to old res from githubpage."
+        default: false
+        required: false
+        type: boolean
       check-errors:
         description: "Choose whether to check for errors."
         default: true
         required: false
         type: boolean
+      pages-url:
+        description: "Pkgs test res github pages url."
+        default: "https://rt-thread.github.io/packages/"
+        required: false
+        type: string
       deploy-pages:
         description: "Choose whether to deploy pages."
         default: false
@@ -70,7 +80,7 @@ jobs:
         shell: bash 
         run: |
           sudo apt install python3 python3-pip gcc git libncurses5-dev tree -y
-          python3 -m pip install scons==4.4.0 requests tqdm wget dominate PyGithub 
+          python3 -m pip install scons==4.4.0 requests tqdm wget dominate PyGithub requests pytz
       - name: Copy RT-Thread/packages to env
         if: "${{ endsWith(github.repository, '/packages') == true }}"
         shell: bash 
@@ -86,29 +96,27 @@ jobs:
           python pkgs-test.py config --bsps='${{ inputs.bsps }}'
           python pkgs-test.py download
       - name: Carry Out Packages Test
-        if: ${{ inputs.package-test-all == false }}
         shell: bash
         run: |
+          cd ${{ github.workspace }}
+          tree .
           cd ${{ github.workspace }}/pkgs-test
-          if [[ ${{ inputs.package-test-nolatest}} ]]; then
-            echo 'Carry Out Packages Test (nolatest).'
-            python pkgs-test.py --repository='${{ inputs.package-repository }}' --nolatest
+          echo 'Carry Out Packages Test.'
+          if [[ ${{ inputs.package-test-all}} == true ]]; then
+            COMMAND="python pkgs-test.py --pkg=all"
           else
-            echo 'Carry Out Packages Test.'
-            python pkgs-test.py --repository='${{ inputs.package-repository }}'
+            COMMAND="python pkgs-test.py --repository=${{ inputs.package-repository }}"
           fi
-      - name: Carry Out All Packages Test
-        if: ${{ inputs.package-test-all == true }}
-        shell: bash
-        run: |
-          cd ${{ github.workspace }}/pkgs-test
-          if [[ ${{ inputs.package-test-nolatest}} ]]; then
-            echo 'Carry Out All Packages Test (nolatest).'
-            python pkgs-test.py --pkg=all --nolatest
-          else
-            echo 'Carry Out All Packages Test.'
-            python pkgs-test.py --pkg=all
-          fi     
+          if [[ ${{ inputs.package-test-nolatest}} == true ]]; then
+            echo 'nolatest.'
+            COMMAND="$COMMAND --nolatest"
+          fi
+          if [[ ${{ inputs.package-append-res}} == true ]]; then
+            echo 'Append test res to old res from githubpage.'
+            COMMAND="$COMMAND --append_res --pages_url='${{ inputs.pages-url}}'"
+          fi
+          echo "$COMMAND" 
+          eval "$COMMAND"    
       - uses: actions/upload-artifact@v3
         with:
           name: artifacts_export
@@ -131,7 +139,7 @@ jobs:
         shell: bash 
         run: |
           sudo apt install python3 python3-pip -y
-          python3 -m pip install requests tqdm wget dominate PyGithub 
+          python3 -m pip install requests tqdm wget dominate PyGithub requests pytz
       - name: Packages test whether or not error
         shell: bash 
         run: |
@@ -143,7 +151,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: packages-test
-    if: "${{ endsWith(github.repository, '/packages') == true && inputs.deploy-pages }}"
+    if: "${{ inputs.deploy-pages }}"
     steps:
       - name: Download artifacts_export
         uses: actions/download-artifact@v3
