@@ -11,8 +11,6 @@ import wget
 from datetime import datetime
 import re
 import pytz
-# from HTMLTable import HTMLTable
-# import html
 from dominate.tags import div, head, style, html, body, p, tr, th, table, td, a, h1, h2, h3
 
 
