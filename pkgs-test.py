@@ -12,6 +12,9 @@ from datetime import datetime
 import re
 from HTMLTable import HTMLTable
 import html
+import requests
+import pytz
+
 
 class PackagesIndex:
     def __init__(self, packages_path):
@@ -294,11 +297,97 @@ class Logs:
         self.pkgs_index = pkgs_index
         self.master_is_tab = False
         self.__clear_logs_path()
+        self.pkgs_res_dict = {}
+        self.append_res = False
+        self.pages_url = 'http://rt-thread.github.io/packages/'
 
     def __clear_logs_path(self):
         if os.path.isdir(self.logs_path):
             shutil.rmtree(self.logs_path)
         os.makedirs(self.logs_path)
+
+    def __build_res(self):
+        def download_old_res():
+            res_old_url = self.pages_url + 'pkgs_res.json'
+            try:
+                response = requests.get(res_old_url)
+                res_old_dict = response.json()
+                return res_old_dict
+            except Exception as e:
+                print(e)
+            return {}
+
+        def check_logfile(log_file):
+            pattern = re.compile('Failure|Invalid|Success')
+            if not (pattern.search(log_file) is None):
+                res = pattern.search(log_file).group()
+            else:
+                res = 'Incomplete'
+            return res
+
+        def get_log_file(version, rtthread_name, bsp_name, pkg_name):
+            log_file = os.path.join('log', rtthread_name,
+                                    bsp_name, pkg_name + '-' + version)
+            (log_path, log_filename) = os.path.split(log_file)
+            if os.path.isdir(os.path.join(self.logs_path, log_path)):
+                for filename in os.listdir(
+                        os.path.join(self.logs_path, log_path)):
+                    if log_filename in filename:
+                        log_file = os.path.join(log_path, filename)
+                        return log_file
+            return ''
+
+        def get_pkg_res(pkg, rtthread_name, bsp_name):
+            pkg_res = {}
+            pkg_res['pkg'] = pkg['name']
+            pkg_res['repository'] = pkg['repository']
+            pkg_res['versions'] = []
+            for pkg_version in pkg['pkg']:
+                res = {}
+                res['version'] = pkg_version['version']
+                res['log_file'] = get_log_file(
+                    pkg_version['version'], rtthread_name, bsp_name, pkg['name'])
+                res['res'] = check_logfile(res['log_file'])
+                pkg_res['versions'].append(res)
+
+            error_flag = False
+            if len(pkg['pkg']) == 1 and pkg['pkg'][0]['version'] == 'latest':
+                error_flag = True
+            for res in pkg_res['versions']:
+                if 'Failure' == res['res'] and 'latest' != res['version']:
+                    error_flag = True
+            if error_flag and (('master' == rtthread_name
+                                and self.master_is_tab)
+                               or 'master' != rtthread_name):
+                pkg_res['error'] = True
+            else:
+                pkg_res['error'] = False
+            return pkg_res
+
+        if self.append_res:
+            pkgs_res_dict = download_old_res()
+        else:
+            pkgs_res_dict = {}
+        print(pkgs_res_dict)
+        for rtthread in self.config_data['rtthread']:
+            if 'pkgs_res' not in pkgs_res_dict:
+                pkgs_res_dict['pkgs_res'] = {}
+            for rtthread in self.config_data['rtthread']:
+                if rtthread['name'] not in pkgs_res_dict['pkgs_res']:
+                    pkgs_res_dict['pkgs_res'][rtthread['name']] = {}
+                for bsp in self.config_data['bsps']:
+                    if bsp['name'] not in pkgs_res_dict['pkgs_res'][rtthread['name']]:
+                        pkgs_res_dict['pkgs_res'][rtthread['name']
+                                                  ][bsp['name']] = {}
+                    for pkg in self.pkgs_index:
+                        pkgs_res_dict['pkgs_res'][rtthread['name']][bsp['name']][pkg['name']] = get_pkg_res(
+                            pkg, rtthread['name'], bsp['name'])
+
+        timezone = pytz.timezone('Asia/Shanghai')
+        localized_time = timezone.localize(datetime.now())
+        pkgs_res_dict['last_run_time'] = localized_time.strftime(
+            '%Y-%m-%d %H:%M:%S %Z%z')
+        return pkgs_res_dict
 
     def __single_pkg_table(self, versions, rtthread_name, bsp_name, pkg_name):
         pkg_table = HTMLTable()
@@ -352,6 +441,10 @@ class Logs:
         self.master_is_tab = tab
 
     def logs(self):
+        self.pkgs_res_dict = self.__build_res()
+        with open(os.path.join(self.logs_path, 'pkgs_res.json'), 'w') as f:
+            json.dump(self.pkgs_res_dict, f)
+
         logs_html = self.__table()
         with open(os.path.join(self.logs_path, 'index.html'), 'w') as f:
             for log in logs_html:

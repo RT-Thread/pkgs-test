@@ -63,7 +63,7 @@ jobs:
         shell: bash 
         run: |
           sudo apt install python3 python3-pip gcc git libncurses5-dev tree -y
-          python3 -m pip install scons==4.4.0 requests tqdm wget html-table PyGithub
+          python3 -m pip install scons==4.4.0 requests tqdm wget html-table PyGithub pytz
       - name: Install Test Resources for package
         if: "${{ endsWith(github.repository, '/packages') == false }}"
         shell: bash 
