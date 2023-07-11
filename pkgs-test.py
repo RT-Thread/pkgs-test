@@ -686,6 +686,28 @@ class Change:
             logging.error(e)
             return None
 
+
+class Check:
+    def __init__(self, res_json_path='pkgs_res.json'):
+        self.res_json_path = res_json_path
+        self.pkgs_res_dict = self.__get_pkgs_res_dict()
+
+    def __get_pkgs_res_dict(self):
+        pkgs_res_dict = {}
+        with open(self.res_json_path, 'rb') as f:
+            pkgs_res_dict = json.load(f)
+        return pkgs_res_dict
+
+    def check_errors(self):
+        error_num = 0
+        for _, rtthread_res in self.pkgs_res_dict['pkgs_res'].items():
+            for _, bsp_res in rtthread_res.items():
+                for _, pkg_res in bsp_res.items():
+                    if pkg_res['error']:
+                        error_num = error_num + 1
+        return error_num
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
