@@ -8,7 +8,7 @@ from tqdm import tqdm
 import threading
 import tarfile
 import wget
-from datetime import datetime 
+from datetime import datetime
 import re
 from HTMLTable import HTMLTable
 import html
@@ -88,7 +88,7 @@ class PackagesIndex:
                         return pkgs_return
         return pkgs_return
 
-    def repository_seek(self, repository, versions='all'):
+    def repository_seek(self, repository):
         pkgs = []
         repository_name = repository.split("/")[1]
         if repository_name == 'packages':
@@ -104,23 +104,14 @@ class PackagesIndex:
                     pkgs_copy.remove(pkg)
             if pkgs_copy:
                 pkgs = pkgs_copy
-        
+
         if not pkgs:
             print('You may have changed the warehouse name while forking!!!')
             return []
-        
+
         for pkg in pkgs[0]['pkg']:
             if 'URL' in pkg:
                 pkg['URL'] = 'https://github.com/' + repository + '.git'
-
-        versions = versions.strip()
-        if not versions == 'all':
-            versions = versions.split(' ')
-            pkg_temp = []
-            for pkg in pkgs[0]['pkg']:
-                if pkg['version'] in versions:
-                    pkg_temp.append(pkg)
-            pkgs[0]['pkg'] = pkg_temp
 
         return pkgs
 
@@ -141,13 +132,19 @@ class Config:
         self.config_file = config_file
         self.config_data = self.__analysis()
         self.root = os.getcwd()
-        self.resources = [['rtthread',self.__unzip],['toolchains',self.__bz2]]
+        self.resources = [['rtthread', self.__unzip],
+                          ['toolchains', self.__bz2]]
+
+    def __override_config_file(self):
+        with open(self.config_file, "w") as file:
+            file.write(json.dumps(self.config_data, indent=4))
+            file.write('\n')
 
     def __analysis(self):
         with open(self.config_file, 'rb') as f:
             data = json.load(f)
             return data
-    
+
     def __get_all_rtthread_versions(self):
         from github import Github
         repo = Github().get_repo("RT-Thread/rt-thread")
@@ -156,7 +153,7 @@ class Config:
         for tag in tags:
             tags_name_list.append(tag.name)
         return tags_name_list
-    
+
     def __move(self, path):
         if len(os.listdir(path)) == 1:
             root = os.path.join(path, os.listdir(path)[0])
@@ -198,35 +195,39 @@ class Config:
     def __get_resource(self, resource):
         for ver in self.config_data[resource[0]]:
             if 'url' in ver and not os.path.isdir(ver['path']):
-                resource[1](self.__download(ver['url'], 'download'), ver['path'])
+                resource[1](self.__download(
+                    ver['url'], 'download'), ver['path'])
 
     def __get_env(self):
         env = self.config_data['env']
-        env_resources = [['packages','packages/packages'],['env','tools/scripts']]
+        env_resources = [['packages', 'packages/packages'],
+                         ['env', 'tools/scripts']]
         if 'url' in env:
             for url in env['url']:
                 for name in env_resources:
-                    path = os.path.join(env['path'],name[1])
+                    path = os.path.join(env['path'], name[1])
                     if name[0] in url and not os.path.isdir(path):
-                        self.__unzip(self.__download(url, 'download', name[0]), path)
+                        self.__unzip(self.__download(
+                            url, 'download', name[0]), path)
         with open(os.path.join(env['path'], 'packages/Kconfig'), 'w') as f:
             f.write('source "$PKGS_DIR/packages/Kconfig"')
         path = os.path.join(env['path'], 'local_pkgs')
         if not os.path.exists(path):
             os.makedirs(path)
-    
+
     def get_resources(self):
         for resource in self.resources:
             self.__get_resource(resource)
         self.__get_env()
 
-    def action_config_bsps(self, bsps_str):
+    def config_bsps(self, bsps_str):
         self.config_data['bsps'] = []
         for bsp_str in bsps_str.split():
             bsp = {}
             [bsp['name'], bsp['toolchain']] = bsp_str.split(":")
             self.config_data['bsps'].append(bsp)
-            
+        self.__override_config_file()
+
     def config_set_all_rtthread_versions(self):
         self.config_data['rtthread'] = []
         self.config_data['rtthread'].append({
@@ -239,8 +240,9 @@ class Config:
                 "name": version,
                 "path": "rtthread/" + version,
                 "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
+        self.__override_config_file()
 
-    def config_rtthread_versions(self, rtthread_versions):
+    def config_rtthread(self, rtthread_versions):
         # rtthread_versions is a string (separated by spaces).
         # branch "branch:master" tag "tag:v4.1.1"
         # e.g. "branch:master tag:v4.1.1 "
@@ -267,6 +269,7 @@ class Config:
                     "name": version,
                     "path": "rtthread/" + version,
                     "url": "https://codeload.github.com/RT-Thread/rt-thread/zip/refs/tags/" + version})
+        self.__override_config_file()
 
     def get_path(self, name):
         if name in "env":
@@ -286,6 +289,7 @@ class Config:
         elif not (self.config_data['pkgs'] == None or self.config_data['pkgs'] == []):
             return list(self.config_data['pkgs'])
         return []
+
     def get_config_data(self):
         return self.config_data
 
@@ -735,34 +739,101 @@ if __name__ == '__main__':
     parser.add_argument('--verify', action='store_true',
                         help='Test verify, If it is not used, it will not affect; if it is used, it will only test the wrong!!',
                         default=False)
+    parser.add_argument('--repository', action='store',
+                        help='Repository name to seek.',
+                        default='')
+    parser.add_argument('--append_res', action='store_true',
+                        help='Append test tes to old res from githubpage.',
+                        default=False)
+    parser.add_argument('--pages_url', action='store',
+                        help='Pkgs test res github pages url.',
+                        default='')
 
+    subparsers = parser.add_subparsers(dest='command')
+
+    parser_check = subparsers.add_parser(name='check',
+                                         help='Check the test res.')
+    parser_check.add_argument('-f', '--file',
+                              help='Input file pkgs_res.json path.',
+                              default='artifacts_export/pkgs_res.json')
+
+    parser_config = subparsers.add_parser(name='config',
+                                          help='Config the config.json.')
+    parser_config.add_argument('-f', '--file',
+                               help='Input file config.json path.',
+                               default='config.json')
+    parser_config.add_argument('-r', '--rtthread',
+                               help='config the RT-Thread version (separated by spaces).',
+                               default='')
+    parser_config.add_argument('-b', '--bsps',
+                               help='config the bsps (separated by spaces).',
+                               default='')
+    parser_download = subparsers.add_parser(name='download',
+                                            help='Download resources by config.json.')
+    parser_download.add_argument('-f', '--file',
+                                 help='Input file config.json path.',
+                                 default='config.json')
     args = parser.parse_args()
 
-    time_old=datetime.now() 
-
-    config = Config(args.config)
-    pkgs_name = config.get_pkgs_name(args.pkg)
-    if not pkgs_name:
-        print("pkgs field is None!")
-        exit(0)
-    print(pkgs_name)
-    config.get_resources()
-
-    packages_index = PackagesIndex(os.path.join(config.get_path('env'),'packages/packages'))
-    packages_index.nolatest(args.nolatest)
-    pkgs_config_dict = packages_index.name_seek(pkgs_name)
-    print(pkgs_config_dict)
-
-    logs = Logs('artifacts_export', config.get_config_data(), pkgs_config_dict)
-    build = Build(config, pkgs_config_dict, logs, args.j)
-
-    build.debug(args.debug)
-    if args.verify:
-        build.build_failures('verify.json')
+    if args.command == 'check':
+        check = Check(res_json_path=args.file)
+        error_num = check.check_errors()
+        if error_num > 0:
+            print('pkgs test has {error_num} error.'.format(
+                error_num=error_num))
+            sys.exit(1)
+        else:
+            print('pkgs test has {error_num} error.'.format(
+                error_num=error_num))
+            sys.exit(0)
+    elif args.command == 'config':
+        config = Config(args.file)
+        if args.rtthread:
+            config.config_rtthread(args.rtthread)
+        if args.bsps:
+            config.config_bsps(args.bsps)
+    elif args.command == 'download':
+        config = Config(args.file)
+        config.get_resources()
     else:
-        build.clean_bsps('verify.json')
-        build.all()
+        time_old = datetime.now()
 
-    time_new=datetime.now() 
-    print(time_new-time_old)
-    print('Please via browser open ' + os.path.join(os.getcwd(),'artifacts_export/index.html') + ' view results!!')
+        config = Config(args.config)
+        pkgs_name = config.get_pkgs_name(args.pkg)
+        if not pkgs_name:
+            print("pkgs field is None!")
+            exit(0)
+        print(pkgs_name)
+        config.get_resources()
+
+        packages_index = PackagesIndex(os.path.join(
+            config.get_path('env'), 'packages/packages'))
+        packages_index.nolatest(args.nolatest)
+
+        if args.repository:
+            pkgs_config_dict = packages_index.repository_seek(args.repository)
+        else:
+            pkgs_config_dict = packages_index.name_seek(pkgs_name)
+
+        print(pkgs_config_dict)
+
+        logs = Logs('artifacts_export',
+                    config.get_config_data(), pkgs_config_dict)
+        if args.append_res:
+            if args.pages_url:
+                logs.pages_url = args.pages_url
+            logs.append_res = True
+
+        build = Build(config, pkgs_config_dict, logs, args.j)
+
+        build.debug(args.debug)
+        if args.verify:
+            build.build_failures('verify.json')
+        else:
+            build.clean_bsps('verify.json')
+            build.all()
+
+        time_new = datetime.now()
+        print(time_new-time_old)
+        print('Please via browser open ' + os.path.join(os.getcwd(),
+                                                        'artifacts_export/index.html') + ' view results!!')
