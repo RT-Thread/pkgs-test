@@ -33,16 +33,31 @@ on:
         default: ${{ github.repository }}
         required: false
         type: string
-      package-version:
-        description: "Packages version to test (separated by spaces)."
-        default: "all"
+      package-test-nolatest:
+        description: "Do not test the latest version of the package."
+        default: false
         required: false
-        type: string
+        type: boolean
+      package-test-all:
+        description: "test the all of the package in RT-Thread/packages."
+        default: false
+        required: false
+        type: boolean
+      package-append-res:
+        description: "Append test res to old res from githubpage."
+        default: false
+        required: false
+        type: boolean
       check-errors:
         description: "Choose whether to check for errors."
         default: true
         required: false
         type: boolean
+      pages-url:
+        description: "Pkgs test res github pages url."
+        default: "https://rt-thread.github.io/packages/"
+        required: false
+        type: string
       deploy-pages:
         description: "Choose whether to deploy pages."
         default: false
@@ -54,6 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          path: repository
       - uses: actions/checkout@v3
         with:
           repository: '${{ inputs.pkgs-test-repository }}'
@@ -63,69 +80,68 @@ jobs:
         shell: bash 
         run: |
           sudo apt install python3 python3-pip gcc git libncurses5-dev tree -y
-          python3 -m pip install scons==4.4.0 requests tqdm wget html-table PyGithub pytz
-      - name: Install Test Resources for package
-        if: "${{ endsWith(github.repository, '/packages') == false }}"
-        shell: bash 
-        run: |
-          cd ${{ github.workspace }}/pkgs-test
-          PYTHONCMD="pkgs_test = __import__('pkgs-test'); \
-                    config = pkgs_test.Config(); \
-                    config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
-                    config.get_resources();"
-          python -c "$PYTHONCMD"
-      - name: Install Test Resources for RT-Thread/packages
+          python3 -m pip install scons==4.4.0 requests tqdm wget html_table PyGithub requests pytz
+      - name: Copy RT-Thread/packages to env
         if: "${{ endsWith(github.repository, '/packages') == true }}"
         shell: bash 
         run: |
           cd ${{ github.workspace }}
-          cp -r ../packages ../packages_temp; \
-          mkdir -p ./pkgs-test/env; \
-          cp -r ../packages_temp ./pkgs-test/env/packages; \
-          cd pkgs-test
-          tree
-          PYTHONCMD="pkgs_test = __import__('pkgs-test'); \
-                    config = pkgs_test.Config(); \
-                    config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
-                    config.get_resources();"
-          python -c "$PYTHONCMD"
+          mkdir -p ./pkgs-test/env
+          cp -r ./repository ./pkgs-test/env/packages
+      - name: Install Test Resources
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/pkgs-test
+          python pkgs-test.py config --rtthread='${{ inputs.rt-thread-versions }}'
+          python pkgs-test.py config --bsps='${{ inputs.bsps }}'
+          python pkgs-test.py download
       - name: Carry Out Packages Test
         shell: bash
         run: |
           cd ${{ github.workspace }}/pkgs-test
-          PYTHONCMD="import os; \
-                      pkgs_test = __import__('pkgs-test'); \
-                      config = pkgs_test.Config(); \
-                      config.config_rtthread_versions('${{ inputs.rt-thread-versions }}'); \
-                      config.action_config_bsps(\"${{ inputs.bsps }}\"); \
-                      packages_index = pkgs_test.PackagesIndex(os.path.join(config.get_path('env'),'packages/packages')); \
-                      pkgs_config_dict = packages_index.repository_seek('${{ inputs.package-repository }}','${{ inputs.package-version }}'); \
-                      logs = pkgs_test.Logs('artifacts_export', config.get_config_data(), pkgs_config_dict); \
-                      build = pkgs_test.Build(config, pkgs_config_dict, logs); \
-                      build.all();"
-          python -c "$PYTHONCMD"
+          echo 'Carry Out Packages Test.'
+          if [[ ${{ inputs.package-test-all}} == true ]]; then
+            COMMAND="python pkgs-test.py --pkg=all"
+          else
+            COMMAND="python pkgs-test.py --repository=${{ inputs.package-repository }}"
+          fi
+          if [[ ${{ inputs.package-test-nolatest}} == true ]]; then
+            echo 'nolatest.'
+            COMMAND="$COMMAND --nolatest"
+          fi
+          if [[ ${{ inputs.package-append-res}} == true ]]; then
+            echo 'Append test res to old res from githubpage.'
+            COMMAND="$COMMAND --append_res --pages_url='${{ inputs.pages-url}}'"
+          fi
+          echo "$COMMAND" 
+          eval "$COMMAND"    
       - uses: actions/upload-artifact@v3
         with:
           name: artifacts_export
           path: ${{ github.workspace }}/pkgs-test/artifacts_export
-      
+
   check-errors:
     runs-on: ubuntu-latest
     needs: packages-test
     if: "${{ inputs.check-errors }}"
     steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: '${{ inputs.pkgs-test-repository }}'
+          ref: '${{ inputs.pkgs-test-branch }}'      
       - name: Download artifacts_export
         uses: actions/download-artifact@v3
         with:
           name: artifacts_export
+      - name: Install Tools
+        shell: bash 
+        run: |
+          sudo apt install python3 python3-pip -y
+          python3 -m pip install requests tqdm wget html_table PyGithub requests pytz
       - name: Packages test whether or not error
         shell: bash 
         run: |
-          if [ -f "index.html" ]; then str1=`cat index.html`; else str1=""; fi
-          echo $str1
-          str2="#f00"
-          if [[ $str1 == *$str2* ]]; then echo "Software package test failed." && exit 1;\
-          else echo "Software package test success.";fi
+          python pkgs-test.py check --file='pkgs_res.json'
 
   Deploy-Pages:
     environment:
@@ -133,7 +149,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: packages-test
-    if: "${{ endsWith(github.repository, '/packages') == true && inputs.deploy-pages }}"
+    if: "${{ inputs.deploy-pages }}"
     steps:
       - name: Download artifacts_export
         uses: actions/download-artifact@v3
