@@ -86,8 +86,8 @@ jobs:
         shell: bash 
         run: |
           cd ${{ github.workspace }}
-          mkdir -p ./pkgs-test/env
-          cp -r ./repository ./pkgs-test/env/packages
+          mkdir -p ./pkgs-test/env/packages
+          cp -r ./repository ./pkgs-test/env/packages/packages
       - name: Install Test Resources
         shell: bash
         run: |
