@@ -10,10 +10,9 @@ import tarfile
 import wget
 from datetime import datetime
 import re
-from HTMLTable import HTMLTable
-import html
 import requests
 import pytz
+from dominate.tags import div, head, style, html, body, p, tr, th, table, td, a, h1, h2, h3, details, summary
 
 
 class PackagesIndex:
@@ -393,53 +392,124 @@ class Logs:
             '%Y-%m-%d %H:%M:%S %Z%z')
         return pkgs_res_dict
 
-    def __single_pkg_table(self, versions, rtthread_name, bsp_name, pkg_name):
-        pkg_table = HTMLTable()
-        pkg_rows = list()
-        error_flag = ''
-        for version in versions:
-            link = ''
-            log_file = os.path.join('log', rtthread_name, bsp_name, pkg_name + '-' + version['version'])
-            (log_path, log_filename) = os.path.split(log_file)
-            if os.path.isdir(os.path.join(self.logs_path,log_path)):
-                for filename in os.listdir(os.path.join(self.logs_path,log_path)):
-                    if log_filename in filename:
-                        log_file = os.path.join(log_path,filename)
-                pattern = re.compile('Failure|Invalid|Success')
-                if not os.path.isfile(os.path.join(self.logs_path,log_file)):
-                    link = ''
-                elif not (pattern.search(log_file) is None):
-                    link = '<a href="' + log_file + '">' + pattern.search(log_file).group() + '</a>'
-                else:
-                    link = '<a href="' + log_file + '">Incomplete</a>'
-            pkg_rows.append([version['version'],link])
-            if (('latest' in version['version']) and len(versions)==1) or \
-            (('Failure' in log_file) and (not 'latest' in version['version'])):
-                error_flag = 'error'
-        pkg_table.append_data_rows((pkg_rows))
-        if error_flag == 'error':
-            if ('master' in rtthread_name and self.master_is_tab) or (not 'master' in rtthread_name):
-                pkg_table.set_style({'background-color': '#f00',})
-        return html.unescape(pkg_table.to_html())
+    def __html_report(self):
+        style_applied = '''
+            body{
+                font-family: verdana,arial,sans-serif;
+                font-size:11px;
+            }
+            table.gridtable {
+                color: #333333;
+                border-width: 1px;
+                border-color: #666666;
+                border-collapse: collapse;
+                font-size:11px;
+            }
+            table.gridtable th {
+                border-width: 1px;
+                padding: 8px;
+                border-style: solid;
+                border-color: #666666;
+                background-color: #DDEBF7;
+            }
+            table.gridtable td {
+                border-width: 1px;
+                padding: 8px;
+                border-style: solid;
+                border-color: #666666;
+                background-color: #eeeeee;
+                text-align:center;
+            }
+            table.gridtable td.failed {
+                color: red;
+            }
+            table.gridtable td.successed {
+                color: green;
+            }
+            table.gridtable td.warning {
+                color: yellow;
+            }
+            table.gridtable th.error {
+                background-color: red;
+            }
+            li {
+                margin-top: 5px;
+            }
+            div{
+                margin-top: 10px;
+            }
+        '''
 
-    def __table(self):
-        logs = []
-        data = self.config_data
-        pkgs_rows = ['']
-        for pkg in self.pkgs_index:
-            link = '<a href="' + pkg['repository'] + '">' + pkg['name'] + '</a>'
-            pkgs_rows.append(link)
-        for rtthread in data['rtthread']:
-            table = HTMLTable(caption=rtthread['name'])
-            table.append_header_rows((pkgs_rows,))
-            for bsp in data['bsps']:
-                data_rows = list()
-                for pkg in self.pkgs_index:
-                    data_rows.append(self.__single_pkg_table(pkg['pkg'], rtthread['name'], bsp['name'],pkg['name']))
-                data_rows.insert(0,bsp['name'])
-                table.append_data_rows((data_rows,))
-            logs.append(html.unescape(table.to_html()))
-        return logs
+        def generate_pkg_result_table(pkg):
+            pkg_result_table = table(cls='gridtable')
+            link_pkg = a(pkg['pkg'], href=pkg['repository'])
+            if pkg['error']:
+                pkg_result_table.add(th(link_pkg, colspan='2', cls='error'))
+            else:
+                pkg_result_table.add(th(link_pkg, colspan='2'))
+            for version in pkg['versions']:
+                pkg_version_tr = tr()
+                pkg_version_tr += td(version['version'])
+                if version['res'] == 'Success':
+                    pkg_version_tr += td(a(version['res'],
+                                         href=version['log_file']), cls='successed')
+                elif version['res'] == 'Failure':
+                    pkg_version_tr += td(a(version['res'],
+                                         href=version['log_file']), cls='failed')
+                else:
+                    pkg_version_tr += td(a(version['res'],
+                                         href=version['log_file']), cls='warning')
+                pkg_result_table.add(pkg_version_tr)
+            return pkg_result_table
+
+        def get_success_pkg_num(pkgs):
+            success_pkg_num = 0
+            for __, pkg_res in pkgs.items():
+                for version in pkg_res['versions']:
+                    if version['version'] == 'latest' and version['res'] == 'Success':
+                        success_pkg_num = success_pkg_num + 1
+            return success_pkg_num
+
+        def generate_result_table():
+            result_div = div(id='pkgs_test_result')
+            result_div.add(h1('Packages Test Result'))
+            result_div.add(
+                p('Last run at: ' + self.pkgs_res_dict['last_run_time']))
+            for rtthread_name, rtthread_res in self.pkgs_res_dict['pkgs_res'].items():
+                result_div = div(id='pkgs_test_result_' + rtthread_name)
+                result_div.add(
+                    h2('RT-Thread Version: ' + rtthread_name))
+                for bsp_name, bsp_res in rtthread_res.items():
+                    result_div.add(h3("bsp: {bsp}".format(bsp=bsp_name)))
+                    pkgs_num = len(bsp_res)
+                    success_num = get_success_pkg_num(bsp_res)
+                    result_div.add(
+                        p("{pkgs_num} packages in total, {success_num} packages pass the test. ({success_num}/{pkgs_num})".format(
+                            pkgs_num=pkgs_num,
+                            success_num=success_num)))
+                    d = details()
+                    d.add(summary("problem packages: "))
+                    for pkg_name, pkg_res in bsp_res.items():
+                        for version in pkg_res['versions']:
+                            if version['version'] == 'latest' and version['res'] != 'Success':
+                                d.add(
+                                    p(a(pkg_name, href=pkg_res['repository'])))
+                    result_div.add(d)
+
+                rtthread_result_table = table(cls='gridtable')
+                for bsp_name, bsp_res in rtthread_res.items():
+                    bsp_tr = tr()
+                    bsp_tr += td(bsp_name)
+                    for pkg_name, pkg_res in bsp_res.items():
+                        bsp_tr += td(generate_pkg_result_table(pkg_res))
+                    rtthread_result_table.add(bsp_tr)
+
+        html_root = html()
+        with html_root.add(head()):
+            style(style_applied, type='text/css')
+        with html_root.add(body()):
+            generate_result_table()
+        return html_root.render()
 
     def master_tab(self, tab=True):
         self.master_is_tab = tab
@@ -449,7 +519,7 @@ class Logs:
         with open(os.path.join(self.logs_path, 'pkgs_res.json'), 'w') as f:
             json.dump(self.pkgs_res_dict, f)
 
-        logs_html = self.__table()
+        logs_html = self.__html_report()
         with open(os.path.join(self.logs_path, 'index.html'), 'w') as f:
             for log in logs_html:
                 f.write(log)
