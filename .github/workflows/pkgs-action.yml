@@ -80,7 +80,7 @@ jobs:
         shell: bash 
         run: |
           sudo apt install python3 python3-pip gcc git libncurses5-dev tree -y
-          python3 -m pip install scons==4.4.0 requests tqdm wget html_table PyGithub requests pytz
+          python3 -m pip install scons==4.4.0 requests tqdm wget dominate PyGithub requests pytz
       - name: Copy RT-Thread/packages to env
         if: "${{ endsWith(github.repository, '/packages') == true }}"
         shell: bash 
@@ -137,7 +137,7 @@ jobs:
         shell: bash 
         run: |
           sudo apt install python3 python3-pip -y
-          python3 -m pip install requests tqdm wget html_table PyGithub requests pytz
+          python3 -m pip install requests tqdm wget dominate PyGithub requests pytz
       - name: Packages test whether or not error
         shell: bash 
         run: |
