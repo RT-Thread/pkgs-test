@@ -141,7 +141,7 @@ jobs:
       - name: Packages test whether or not error
         shell: bash 
         run: |
-          python pkgs-test.py check --file='pkgs_res.json'
+          python pkgs-test.py check --file='pkgs_res_single.json'
 
   Deploy-Pages:
     environment:

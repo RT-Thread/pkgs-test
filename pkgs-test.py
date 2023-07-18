@@ -309,7 +309,7 @@ class Logs:
             shutil.rmtree(self.logs_path)
         os.makedirs(self.logs_path)
 
-    def __build_res(self):
+    def __build_res(self, append_res=False):
         def download_old_res():
             res_old_url = self.pages_url + 'pkgs_res.json'
             try:
@@ -367,7 +367,7 @@ class Logs:
                 pkg_res['error'] = False
             return pkg_res
 
-        if self.append_res:
+        if append_res:
             pkgs_res_dict = download_old_res()
         else:
             pkgs_res_dict = {}
@@ -515,7 +515,11 @@ class Logs:
         self.master_is_tab = tab
 
     def logs(self):
-        self.pkgs_res_dict = self.__build_res()
+        pkgs_res_single_dict = self.__build_res(False)
+        with open(os.path.join(self.logs_path, 'pkgs_res_single.json'), 'w') as f:
+            json.dump(pkgs_res_single_dict, f)
+
+        self.pkgs_res_dict = self.__build_res(self.append_res)
         with open(os.path.join(self.logs_path, 'pkgs_res.json'), 'w') as f:
             json.dump(self.pkgs_res_dict, f)
 
