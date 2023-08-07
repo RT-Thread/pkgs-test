@@ -780,6 +780,7 @@ class Check:
         error_num = 0
         if 'master' not in self.pkgs_res_dict['pkgs_res']:
             print('[error] can not find rt-thread master version.')
+            error_num = 1
         else:
             for bsp_name, bsp_res in self.pkgs_res_dict['pkgs_res']['master'].items():
                 for pkg_name, pkg_res in bsp_res.items():
