@@ -853,10 +853,10 @@ if __name__ == '__main__':
                                help='config the RT-Thread version (separated by spaces).',
                                default='')
     parser_config.add_argument('-b', '--bsps',
-                               help='config the bsps (separated by \\n or spaces).',
+                               help='config the bsps (separated by spaces).',
                             default='')
     parser_config.add_argument('-p', '--pkgs',
-                            help='config the pkgs (separated by spaces).',
+                            help='config the pkgs (separated by \\n or spaces).',
                             default='')
     parser_download = subparsers.add_parser(name='download',
                                             help='Download resources by config.json.')
