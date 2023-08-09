@@ -18,7 +18,19 @@ jobs:
       # [bsp]:[toolchain]
       # 默认值为 "qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm k210:sourcery-riscv-none-embed"
       bsps: "qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm k210:sourcery-riscv-none-embed"
+
+      # 指定测试的软件包 使用空格或者换行符分隔 仅仅test-specific-pkgs为true时可用。
+      # 多行输入可以这样输入
+      # pkgs: |
+      #     hello
+      #     LiteOS-SDK
+      # 默认值是 "hello"
+      pkgs: "hello"
       
+      # 用于测试指定的软件包，用于对rt-thread内核更新的检查，通过参数pkgs指定软件包。
+      # 默认值为false，不指定。
+      test-specific-pkgs: false
+
       # 测试package时是否测试latest版本，false时测试latest版本。
       # 默认值为 false
       package-test-nolatest: false
@@ -224,6 +236,8 @@ pip install scons requests tqdm wget dominate PyGithub pytz
   python pkgs-test.py config --rtthread="qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm"
 - 指定配置文件
   - python pkgs-test.py config --rtthread=branch:master --file=config.json
+- 指定软件包
+  - python pkgs-test.py config --pkgs="hello"
 
 ### 使用check检查测试结果
 - 检查自动生成的测试结果
