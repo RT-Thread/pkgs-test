@@ -104,7 +104,9 @@ jobs:
           cd ${{ github.workspace }}/pkgs-test
           python pkgs-test.py config --rtthread='${{ inputs.rt-thread-versions }}'
           python pkgs-test.py config --bsps='${{ inputs.bsps }}'
-          python pkgs-test.py config --pkgs='${{ inputs.pkgs }}'
+          if [[ ${{ inputs.test-specific-pkgs}} == true ]]; then
+            python pkgs-test.py config --pkgs='${{ inputs.pkgs }}'
+          fi
           python pkgs-test.py download
       - name: Carry Out Packages Test
         shell: bash
