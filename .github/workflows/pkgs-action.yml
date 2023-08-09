@@ -33,6 +33,11 @@ on:
         default: "hello"
         required: false
         type: string
+      test-specific-pkgs:
+        description: "Test specific packages."
+        default: false
+        required: false
+        type: boolean
       package-repository:
         description: "Package repository to test."
         default: ${{ github.repository }}
@@ -108,6 +113,8 @@ jobs:
           echo 'Carry Out Packages Test.'
           if [[ ${{ inputs.package-test-all}} == true ]]; then
             COMMAND="python pkgs-test.py --pkg=all"
+          elif [[ ${{ inputs.test-specific-pkgs}} == true ]]; then
+            COMMAND="python pkgs-test.py"
           else
             COMMAND="python pkgs-test.py --repository=${{ inputs.package-repository }}"
           fi
