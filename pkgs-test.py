@@ -854,10 +854,10 @@ if __name__ == '__main__':
                                default='')
     parser_config.add_argument('-b', '--bsps',
                                help='config the bsps (separated by spaces).',
-                            default='')
+                               default='')
     parser_config.add_argument('-p', '--pkgs',
-                            help='config the pkgs (separated by \\n or spaces).',
-                            default='')
+                               help='config the pkgs (separated by \\n or spaces).',
+                               default='')
     parser_download = subparsers.add_parser(name='download',
                                             help='Download resources by config.json.')
     parser_download.add_argument('-f', '--file',
