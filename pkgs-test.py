@@ -219,6 +219,19 @@ class Config:
             self.__get_resource(resource)
         self.__get_env()
 
+    def config_pkgs(self, pkgs_str):
+        lines = pkgs_str.split("\n")
+        pkgs_list = []
+        for line in lines:
+            words = line.split(" ")
+            for word in words:
+                if word:
+                    pkgs_list.append(word)
+        print('config pkgs:')
+        print(pkgs_list)
+        self.config_data['pkgs'] = pkgs_list
+        self.__override_config_file()
+
     def config_bsps(self, bsps_str):
         self.config_data['bsps'] = []
         for bsp_str in bsps_str.split():
@@ -840,8 +853,11 @@ if __name__ == '__main__':
                                help='config the RT-Thread version (separated by spaces).',
                                default='')
     parser_config.add_argument('-b', '--bsps',
-                               help='config the bsps (separated by spaces).',
-                               default='')
+                               help='config the bsps (separated by \\n or spaces).',
+                            default='')
+    parser_config.add_argument('-p', '--pkgs',
+                            help='config the pkgs (separated by spaces).',
+                            default='')
     parser_download = subparsers.add_parser(name='download',
                                             help='Download resources by config.json.')
     parser_download.add_argument('-f', '--file',
@@ -866,6 +882,8 @@ if __name__ == '__main__':
             config.config_rtthread(args.rtthread)
         if args.bsps:
             config.config_bsps(args.bsps)
+        if args.pkgs:
+            config.config_pkgs(args.pkgs)
     elif args.command == 'download':
         config = Config(args.file)
         config.get_resources()
