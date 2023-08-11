@@ -65,7 +65,7 @@ jobs:
 
 这里是Packages仓库的软件包测试workflow文件其中的一个job，目的是当发生改动的时候测试改动的软件包。
 
-```c
+```yml
  change:
         if: ${{ github.event_name == 'pull_request' || github.event_name == 'push'}}
         uses: RT-Thread/pkgs-test/.github/workflows/pkgs-action.yml@main
@@ -226,21 +226,37 @@ pip install scons requests tqdm wget dominate PyGithub pytz
 ### 使用config设置配置文件
 - 设置rt-thread内核版本
   - 单个版本
+    ```shell
     python pkgs-test.py config --rtthread=branch:master
+    ```
   - 多个版本
-  python pkgs-test.py config --rtthread="branch:master tag:v4.1.1"
+    ```shell
+    python pkgs-test.py config --rtthread="branch:master tag:v4.1.1"
+    ```
 - 设置bsp
   - 单个版本
-  python pkgs-test.py config --bsps=qemu-vexpress-a9:sourcery-arm
+    ```shell
+    python pkgs-test.py config --bsps=qemu-vexpress-a9:sourcery-arm
+    ```
   - 多个版本
-  python pkgs-test.py config --rtthread="qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm"
+    ```shell
+    python pkgs-test.py config --rtthread="qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm"
+    ```
 - 指定配置文件
-  - python pkgs-test.py config --rtthread=branch:master --file=config.json
+    ```shell
+    python pkgs-test.py config  --rtthread=branch:master --file=config.json
+    ```
 - 指定软件包
-  - python pkgs-test.py config --pkgs="hello"
+    ```shell
+    python pkgs-test.py config --pkgs="hello"
+    ```
 
 ### 使用check检查测试结果
 - 检查自动生成的测试结果
-  python pkgs-test.py check
+    ```shell
+    python pkgs-test.py check
+    ```
 - 指定文件路径
-  python pkgs-test.py check --file='pkgs_res_single.json'
+    ```shell
+    python pkgs-test.py check --file='pkgs_res_single.json'
+    ```
