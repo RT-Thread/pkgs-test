@@ -28,6 +28,16 @@ on:
         default: "qemu-vexpress-a9:sourcery-arm stm32/stm32h750-artpi:sourcery-arm k210:sourcery-riscv-none-embed"
         required: false
         type: string
+      pkgs:
+        description: "String containing the pkgs ( separated by \\n or spaces)."
+        default: "hello"
+        required: false
+        type: string
+      test-specific-pkgs:
+        description: "Test specific packages."
+        default: false
+        required: false
+        type: boolean
       package-repository:
         description: "Package repository to test."
         default: ${{ github.repository }}
@@ -94,6 +104,9 @@ jobs:
           cd ${{ github.workspace }}/pkgs-test
           python pkgs-test.py config --rtthread='${{ inputs.rt-thread-versions }}'
           python pkgs-test.py config --bsps='${{ inputs.bsps }}'
+          if [[ ${{ inputs.test-specific-pkgs}} == true ]]; then
+            python pkgs-test.py config --pkgs='${{ inputs.pkgs }}'
+          fi
           python pkgs-test.py download
       - name: Carry Out Packages Test
         shell: bash
@@ -102,6 +115,8 @@ jobs:
           echo 'Carry Out Packages Test.'
           if [[ ${{ inputs.package-test-all}} == true ]]; then
             COMMAND="python pkgs-test.py --pkg=all"
+          elif [[ ${{ inputs.test-specific-pkgs}} == true ]]; then
+            COMMAND="python pkgs-test.py"
           else
             COMMAND="python pkgs-test.py --repository=${{ inputs.package-repository }}"
           fi
