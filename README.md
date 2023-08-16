@@ -152,7 +152,7 @@ jobs:
 用户使用前应使用如下命令安装 pip 依赖
 
 ```shell
-pip install scons requests tqdm wget dominate PyGithub pytz
+pip install scons==4.4.0 requests tqdm wget dominate PyGithub pytz
 ```
 
 其命令行参数如下所示

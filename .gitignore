@@ -1,10 +1,12 @@
-toolchains
-artifacts_export
+env
 download
 rtthread
+toolchains
 local_pkgs
-error.json
-*.DS_Store
-env
-verify.json
 
+artifacts_export
+verify.json
+error.json
+
+*.DS_Store
+*/__pycache__
