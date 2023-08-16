@@ -152,13 +152,8 @@ jobs:
 用户使用前应使用如下命令安装 pip 依赖
 
 ```shell
-pip install scons requests tqdm wget dominate PyGithub pytz
+pip install scons==4.4.0 requests tqdm wget dominate PyGithub pytz
 ```
-
-> 如果需要测试的`RT-Thread`版本低于`v5.0.1`，比如`v5.0.0`、`v4.1.1`及其以下版本，需要指定`scons`的版本为`4.4.0`。
-> ```shell
-> pip install scons==4.4.0 requests tqdm wget dominate PyGithub pytz
-> ```
 
 其命令行参数如下所示
 
