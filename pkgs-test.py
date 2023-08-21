@@ -82,7 +82,7 @@ def init_parser():
 
 
 def check_run(args):
-    check = Check(res_json_path=args.file)
+    check = Check(res_path=args.file)
     error_num = check.check_errors()
     if error_num > 0:
         print('pkgs test has {error_num} error.'.format(
