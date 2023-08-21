@@ -1,14 +1,17 @@
+import os
 import json
 
 
 class Check:
-    def __init__(self, res_json_path='pkgs_res.json'):
-        self.res_json_path = res_json_path
+    def __init__(self, res_path='pkgs_res.json'):
+        self.res_path = res_path
+        self.artifacts_path = os.path.join(os.getcwd(),
+                                           os.path.dirname(res_path))
         self.pkgs_res_dict = self.__get_pkgs_res_dict()
 
     def __get_pkgs_res_dict(self):
         pkgs_res_dict = {}
-        with open(self.res_json_path, 'rb') as f:
+        with open(self.res_path, 'rb') as f:
             pkgs_res_dict = json.load(f)
         return pkgs_res_dict
 
@@ -25,13 +28,24 @@ class Check:
                     for version_res in pkg_res['versions']:
                         if version_res['version'] == 'latest':
                             check_counter = check_counter + 1
-                            print('check {pkg} {version} on {bsp}.'.format(
-                                pkg=pkg_name,
-                                version=version_res['version'],
-                                bsp=bsp_name))
+                            pkg = pkg_name
+                            ver = version_res['version']
+                            bsp = bsp_name
+                            print(f"check {pkg} {ver} on {bsp}.")
                             if version_res['res'] == 'Failure':
                                 error_num = error_num + 1
                                 print('[error] compile failure.')
+                                log_file = (self.artifacts_path + '/' +
+                                            version_res['log_file'])
+                                try:
+                                    with open(log_file, 'r') as file:
+                                        context = file.read()
+                                        desc = f"master/{bsp}/{pkg}/{ver}"
+                                        print("::group::" + desc)
+                                        print(context)
+                                        print('::endgroup::')
+                                except Exception as e:
+                                    print(e)
                             else:
                                 print('compile success.')
                         else:
