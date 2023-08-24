@@ -77,8 +77,9 @@ class Config:
     def __get_resource(self, resource):
         for ver in self.config_data[resource[0]]:
             if 'url' in ver and not os.path.isdir(ver['path']):
-                resource[1](self.__download(
-                    ver['url'], 'download'), ver['path'])
+                download_f = self.__download(ver['url'], 'download')
+                resource[1](download_f, ver['path'])
+                os.remove(download_f)
 
     def __get_env(self):
         env = self.config_data['env']
@@ -89,8 +90,9 @@ class Config:
                 for name in env_resources:
                     path = os.path.join(env['path'], name[1])
                     if name[0] in url and not os.path.isdir(path):
-                        self.__unzip(self.__download(
-                            url, 'download', name[0]), path)
+                        download_f = self.__download(url, 'download', name[0])
+                        self.__unzip(download_f, path)
+                        os.remove(download_f)
         with open(os.path.join(env['path'], 'packages/Kconfig'), 'w') as f:
             f.write('source "$PKGS_DIR/packages/Kconfig"')
         path = os.path.join(env['path'], 'local_pkgs')
