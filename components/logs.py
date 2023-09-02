@@ -20,6 +20,7 @@ class Logs:
         self.pkgs_res = {}
         self.append_res = False
         self.pages_url = 'http://rt-thread.github.io/packages/'
+        self.pkg_res_version = 'v0.2.0'
 
     def __clear_logs_path(self):
         if os.path.isdir(self.logs_path):
@@ -57,54 +58,102 @@ class Logs:
                         return log_file
             return ''
 
-        def get_pkg_res(pkg, rtthread_name, bsp_name):
-            pkg_res = {}
-            pkg_res['pkg'] = pkg['name']
-            pkg_res['repository'] = pkg['repository']
-            pkg_res['versions'] = []
-            for pkg_version in pkg['pkg']:
-                version = pkg_version['version']
-                res = {}
-                res['version'] = version
-                res['log_file'] = get_log_file(
-                    version, rtthread_name, bsp_name, pkg['name'])
-                res['res'] = check_logfile(res['log_file'])
-                pkg_res['versions'].append(res)
+        def get_pkg_res(pkg, rtt_list, bsp_list):
+            res = {}
+            res['pkg'] = pkg['name']
+            res['repository'] = pkg['repository']
+            res['versions'] = {}
 
-            error_flag = False
-            if len(pkg['pkg']) == 1 and pkg['pkg'][0]['version'] == 'latest':
-                error_flag = True
-            for res in pkg_res['versions']:
-                if 'Failure' == res['res'] and 'latest' != res['version']:
-                    error_flag = True
-            if error_flag and (('master' == rtthread_name
-                                and self.master_is_tab)
-                               or 'master' != rtthread_name):
-                pkg_res['error'] = True
+            pkg_res = res['versions']
+            version_list = []
+            for pkg_version in pkg['pkg']:
+                version_list.append(pkg_version['version'])
+
+            for version in version_list:
+                version_res = {}
+                for rtt in rtt_list:
+                    rtt_res = {}
+                    for bsp in bsp_list:
+                        bsp_res = {}
+                        log_file = get_log_file(
+                            version, rtt, bsp, pkg['name'])
+                        bsp_res['log_file'] = log_file
+                        bsp_res['res'] = check_logfile(log_file)
+                        rtt_res[bsp] = bsp_res
+                    version_res[rtt] = rtt_res
+                pkg_res[version] = version_res
+
+            pkg_err_level = 0
+            level_num = [0, 0, 0]
+            for version in version_list:
+                version_res = pkg_res[version]
+                version_err_level = 0
+                rtt_err_num = 0
+                for rtt in rtt_list:
+                    rtt_res = version_res[rtt]
+                    bsp_err_num = 0
+                    rtt_err_level = 0
+                    for bsp in bsp_list:
+                        bsp_res = rtt_res[bsp]
+                        if bsp_res['res'] == 'Failure':
+                            bsp_err_num = bsp_err_num + 1
+                    if bsp_err_num == 0:
+                        rtt_err_level = 0  # all bsps pass
+                    elif bsp_err_num == len(bsp_list):
+                        rtt_err_level = 1  # part of bsps pass
+                        rtt_err_num = rtt_err_num + 1
+                    else:
+                        rtt_err_level = 2  # none bsp pass
+                        rtt_err_num = rtt_err_num + 1
+                    rtt_res['rtt_err_level'] = rtt_err_level
+                if rtt_err_num == 0:
+                    version_err_level = 0  # all rtt pass
+                    level_num[0] = level_num[0] + 1
+                elif ('master' in version_res and
+                      version_res['master']['rtt_err_level'] == 0):
+                    version_err_level = 1  # master pass
+                    level_num[1] = level_num[1] + 1
+                else:
+                    version_err_level = 2  # master not pass
+                    level_num[2] = level_num[2] + 1
+                version_res['version_err_level'] = version_err_level
+
+            if level_num[0] == len(version_list):
+                pkg_err_level = 0  # all version pass
+            elif (level_num[0] + level_num[1] == len(version_list) or
+                  ('latest' in version_list and (
+                      pkg_res['latest']['version_err_level'] == 0 or
+                      pkg_res['latest']['version_err_level'] == 1))):
+                pkg_err_level = 1  # master latest pass
             else:
-                pkg_res['error'] = False
-            return pkg_res
+                pkg_err_level = 2  # master or latest not pass
+            res['pkg_err_level'] = pkg_err_level
+            return res
 
         if append_res:
             pkgs_res = download_old_res()
+            if not (('version' in pkgs_res) and
+                    (pkgs_res['version'] == self.pkg_res_version)):
+                print("Download an old version pkgs_res.json !")
+                pkgs_res = {}
+
         else:
             pkgs_res = {}
+        pkgs_res['version'] = self.pkg_res_version
         print(pkgs_res)
+        if 'pkgs_res' not in pkgs_res:
+            pkgs_res['pkgs_res'] = {}
+
+        rtt_list = []
         for rtthread in self.config_data['rtthread']:
-            if 'pkgs_res' not in pkgs_res:
-                pkgs_res['pkgs_res'] = {}
-            for rtthread in self.config_data['rtthread']:
-                rtt_name = rtthread['name']
-                if rtt_name not in pkgs_res['pkgs_res']:
-                    pkgs_res['pkgs_res'][rtt_name] = {}
-                for bsp in self.config_data['bsps']:
-                    bsp_name = bsp['name']
-                    if bsp_name not in pkgs_res['pkgs_res'][rtt_name]:
-                        pkgs_res['pkgs_res'][rtt_name][bsp_name] = {}
-                    for pkg in self.pkgs_index:
-                        pkg_name = pkg['name']
-                        pkgs_res['pkgs_res'][rtt_name][bsp_name][pkg_name] = \
-                            get_pkg_res(pkg, rtt_name, bsp_name)
+            rtt_list.append(rtthread['name'])
+        bsp_list = []
+        for bsp in self.config_data['bsps']:
+            bsp_list.append(bsp['name'])
+
+        for pkg in self.pkgs_index:
+            pkgs_res['pkgs_res'][pkg['name']] = \
+                get_pkg_res(pkg, rtt_list, bsp_list)
 
         timezone = pytz.timezone('Asia/Shanghai')
         localized_time = timezone.localize(datetime.now())
@@ -252,11 +301,11 @@ class Logs:
         with open(pkgs_res_path, 'w') as f:
             json.dump(self.pkgs_res, f)
 
-        logs_html = self.__html_report()
-        logs_html_path = os.path.join(self.logs_path, 'index.html')
-        with open(logs_html_path, 'w') as f:
-            for log in logs_html:
-                f.write(log)
+        # logs_html = self.__html_report()
+        # logs_html_path = os.path.join(self.logs_path, 'index.html')
+        # with open(logs_html_path, 'w') as f:
+        #     for log in logs_html:
+        #         f.write(log)
 
     def path(self):
         return self.logs_path
