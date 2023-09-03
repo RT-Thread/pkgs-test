@@ -24,10 +24,18 @@ class PackagesIndex:
             with open(os.path.join(path, 'package.json'), 'rb') as f:
                 data = json.load(f)
             if 'name' in data and 'enable' in data and 'site' in data:
+                start = "/env/packages/packages/"
+                end = '/' + data['name']
+                pattern = re.escape(start) + "(.*?)" + re.escape(end)
+                result = re.search(pattern, path)
+                category = ''
+                if result:
+                    category = result.group(1)
                 dict = {'name': data['name'],
                         'enable': data['enable'],
                         'author': data['author'],
-                        'repository': data['repository']}
+                        'repository': data['repository'],
+                        'category': category}
                 ver_dict = []
                 for ver in data['site']:
                     if not os.access(os.path.join(path, 'Kconfig'), os.R_OK):
