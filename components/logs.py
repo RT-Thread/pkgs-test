@@ -202,7 +202,7 @@ class Logs:
             for key in sorted_keys:
                 category_dict[key].sort()
                 sorted_category_dict[key] = category_dict[key]
-                return sorted_category_dict
+            return sorted_category_dict
 
         def get_pkgs_availability_level_dict():
             dict = {0: [], 1: [], 2: []}
