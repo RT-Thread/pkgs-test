@@ -17,44 +17,41 @@ class Check:
 
     def check_errors(self):
         error_num = 0
-        if 'master' not in self.pkgs_res_dict['pkgs_res']:
-            print('[error] can not find rt-thread master version.')
-            error_num = 1
-        else:
-            master_res = self.pkgs_res_dict['pkgs_res']['master']
-            for bsp_name, bsp_res in master_res.items():
-                for pkg_name, pkg_res in bsp_res.items():
-                    check_counter = 0
-                    for version_res in pkg_res['versions']:
-                        if version_res['version'] == 'latest':
-                            check_counter = check_counter + 1
-                            pkg = pkg_name
-                            ver = version_res['version']
-                            bsp = bsp_name
-                            print(f"check {pkg} {ver} on {bsp}.")
-                            if version_res['res'] == 'Failure':
-                                error_num = error_num + 1
+        pkgs_res = self.pkgs_res_dict['pkgs_res']
+        for pkg, pkg_res in pkgs_res.items():
+            vers_res = pkg_res['versions']
+            if 'latest' not in vers_res:
+                print(f'[error] {pkg} can not find latest version.')
+                error_num += 1
+            for ver, ver_res in vers_res.items():
+                rtts_res = ver_res['rtt_res']
+                if 'master' not in rtts_res:
+                    print(f'[error] {pkg} {ver}' +
+                          ' can not find rt-thread master version.')
+                    error_num += 1
+                for rtt, rtt_res in rtts_res.items():
+                    bsps_res = rtt_res['bsp_res']
+                    for bsp, bsp_res in bsps_res.items():
+                        if bsp_res['res'] == 'Failure':
+                            if rtt == 'master' and ver == 'latest':
                                 print('[error] compile failure.')
-                                log_file = (self.artifacts_path + '/' +
-                                            version_res['log_file'])
-                                try:
-                                    with open(log_file, 'r') as file:
-                                        context = file.read()
-                                        desc = f"master/{bsp}/{pkg}/{ver}"
-                                        print("::group::" + desc)
-                                        print(context)
-                                        print('::endgroup::')
-                                except Exception as e:
-                                    print(e)
+                                error_num += 1
                             else:
-                                print('compile success.')
-                        else:
-                            print('check {pkg} {version} on {bsp}.'.format(
-                                pkg=pkg_name,
-                                version=version_res['version'],
-                                bsp=bsp_name), end=' ')
-                            print('but not is latest, pass.')
-                    if check_counter == 0:
-                        error_num = error_num + 1
-                        print('[error] can not find latest version.')
+                                print('[warning] compile failure. ' +
+                                      ' But not master(rtt) and latest(pkg).')
+                            log_file = (self.artifacts_path + '/' +
+                                        bsp_res['log_file'])
+                            try:
+                                with open(log_file, 'r') as file:
+                                    context = file.read()
+                                    desc = f"{pkg}:{ver} {rtt} {bsp}"
+                                    print("::group::" + desc)
+                                    print(context)
+                                    print('::endgroup::')
+                            except Exception as e:
+                                print(e)
+                        elif bsp_res['res'] == 'Invalid':
+                            print(f"Invalid. ({pkg}:{ver}  {rtt} {bsp}) ")
+                        elif bsp_res['res'] == 'Success':
+                            print(f"Success. ({pkg}:{ver} {rtt} {bsp}) ")
         return error_num

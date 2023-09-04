@@ -5,9 +5,8 @@ import pytz
 import shutil
 import requests
 from datetime import datetime
-from dominate.tags import (div, head, style, html, body,
-                           p, tr, th, table, td, a, h1,
-                           h2, h3, details, summary)
+from dominate.tags import (div, head, style, html, body, details, summary,
+                           p, a, h1, h2, script, ul, li, span,)
 
 
 class Logs:
@@ -20,6 +19,9 @@ class Logs:
         self.pkgs_res = {}
         self.append_res = False
         self.pages_url = 'http://rt-thread.github.io/packages/'
+        self.pkg_res_version = 'v0.2.0'
+        self.category_dict = {}
+        self.pkgs_availability_level_dict = {}
 
     def __clear_logs_path(self):
         if os.path.isdir(self.logs_path):
@@ -57,54 +59,103 @@ class Logs:
                         return log_file
             return ''
 
-        def get_pkg_res(pkg, rtthread_name, bsp_name):
-            pkg_res = {}
-            pkg_res['pkg'] = pkg['name']
-            pkg_res['repository'] = pkg['repository']
-            pkg_res['versions'] = []
+        def get_pkg_res(pkg, rtt_list, bsp_list):
+            res = {}
+            res['pkg'] = pkg['name']
+            res['repository'] = pkg['repository']
+            res['versions'] = {}
+            res['category'] = pkg['category']
+            pkg_res = res['versions']
+            version_list = []
             for pkg_version in pkg['pkg']:
-                version = pkg_version['version']
-                res = {}
-                res['version'] = version
-                res['log_file'] = get_log_file(
-                    version, rtthread_name, bsp_name, pkg['name'])
-                res['res'] = check_logfile(res['log_file'])
-                pkg_res['versions'].append(res)
+                version_list.append(pkg_version['version'])
 
-            error_flag = False
-            if len(pkg['pkg']) == 1 and pkg['pkg'][0]['version'] == 'latest':
-                error_flag = True
-            for res in pkg_res['versions']:
-                if 'Failure' == res['res'] and 'latest' != res['version']:
-                    error_flag = True
-            if error_flag and (('master' == rtthread_name
-                                and self.master_is_tab)
-                               or 'master' != rtthread_name):
-                pkg_res['error'] = True
+            for version in version_list:
+                version_res = {}
+                version_res['rtt_res'] = {}
+                for rtt in rtt_list:
+                    rtt_res = {}
+                    rtt_res['bsp_res'] = {}
+                    for bsp in bsp_list:
+                        bsp_res = {}
+                        log_file = get_log_file(
+                            version, rtt, bsp, pkg['name'])
+                        bsp_res['log_file'] = log_file
+                        bsp_res['res'] = check_logfile(log_file)
+                        rtt_res['bsp_res'][bsp] = bsp_res
+                    version_res['rtt_res'][rtt] = rtt_res
+                pkg_res[version] = version_res
+
+            pkg_availability_level = 0
+            level_num = [0, 0, 0]
+            for version in version_list:
+                version_res = pkg_res[version]
+                version_availability_level = 0
+                rtt_err_num = 0
+                for rtt in rtt_list:
+                    rtt_res = version_res['rtt_res'][rtt]
+                    bsp_err_num = 0
+                    rtt_availability_level = 0
+                    for bsp in bsp_list:
+                        bsp_res = rtt_res['bsp_res'][bsp]
+                        if bsp_res['res'] == 'Failure':
+                            bsp_err_num = bsp_err_num + 1
+                    if bsp_err_num == 0:
+                        rtt_availability_level = 0  # all bsps pass
+                    elif bsp_err_num < len(bsp_list):
+                        rtt_availability_level = 1  # part of bsps pass
+                        rtt_err_num = rtt_err_num + 1
+                    else:
+                        rtt_availability_level = 2  # none bsp pass
+                        rtt_err_num = rtt_err_num + 1
+                    rtt_res['rtt_availability_level'] = rtt_availability_level
+                if rtt_err_num == 0:
+                    version_availability_level = 0  # all rtt pass
+                    level_num[0] = level_num[0] + 1
+                elif ('master' in version_res and
+                      version_res['master']['rtt_availability_level'] == 0):
+                    version_availability_level = 1  # master pass
+                    level_num[1] = level_num[1] + 1
+                else:
+                    version_availability_level = 2  # master not pass
+                    level_num[2] = level_num[2] + 1
+                version_res['version_availability_level'] = \
+                    version_availability_level
+
+            if level_num[0] == len(version_list):
+                pkg_availability_level = 0  # all version pass
+            elif (level_num[0] + level_num[1] == len(version_list) or
+                  ('latest' in version_list and (
+                      pkg_res['latest']['version_availability_level'] == 0 or
+                      pkg_res['latest']['version_availability_level'] == 1))):
+                pkg_availability_level = 1  # master latest pass
             else:
-                pkg_res['error'] = False
-            return pkg_res
+                pkg_availability_level = 2  # master or latest not pass
+            res['pkg_availability_level'] = pkg_availability_level
+            return res
 
         if append_res:
             pkgs_res = download_old_res()
+            if not (('version' in pkgs_res) and
+                    (pkgs_res['version'] == self.pkg_res_version)):
+                print("Download an old version pkgs_res.json !")
+                pkgs_res = {}
+
         else:
             pkgs_res = {}
-        print(pkgs_res)
+        pkgs_res['version'] = self.pkg_res_version
+        if 'pkgs_res' not in pkgs_res:
+            pkgs_res['pkgs_res'] = {}
+
+        rtt_list = []
         for rtthread in self.config_data['rtthread']:
-            if 'pkgs_res' not in pkgs_res:
-                pkgs_res['pkgs_res'] = {}
-            for rtthread in self.config_data['rtthread']:
-                rtt_name = rtthread['name']
-                if rtt_name not in pkgs_res['pkgs_res']:
-                    pkgs_res['pkgs_res'][rtt_name] = {}
-                for bsp in self.config_data['bsps']:
-                    bsp_name = bsp['name']
-                    if bsp_name not in pkgs_res['pkgs_res'][rtt_name]:
-                        pkgs_res['pkgs_res'][rtt_name][bsp_name] = {}
-                    for pkg in self.pkgs_index:
-                        pkg_name = pkg['name']
-                        pkgs_res['pkgs_res'][rtt_name][bsp_name][pkg_name] = \
-                            get_pkg_res(pkg, rtt_name, bsp_name)
+            rtt_list.append(rtthread['name'])
+        bsp_list = []
+        for bsp in self.config_data['bsps']:
+            bsp_list.append(bsp['name'])
+        for pkg in self.pkgs_index:
+            pkgs_res['pkgs_res'][pkg['name']] = \
+                get_pkg_res(pkg, rtt_list, bsp_list)
 
         timezone = pytz.timezone('Asia/Shanghai')
         localized_time = timezone.localize(datetime.now())
@@ -114,127 +165,199 @@ class Logs:
 
     def __html_report(self):
         style_applied = '''
-            body{
-                font-family: verdana,arial,sans-serif;
-                font-size:11px;
+            .hidden { display: none; }
+            .expandable::before {
+                content: '➔';
+                display: inline-block;
+                transform: rotate(0deg);
+                transition: transform 0.3s;
             }
-            table.gridtable {
-                color: #333333;
-                border-width: 1px;
-                border-color: #666666;
-                border-collapse: collapse;
-                font-size:11px;
+            .expanded::before {
+                transform: rotate(90deg);
             }
-            table.gridtable th {
-                border-width: 1px;
-                padding: 8px;
-                border-style: solid;
-                border-color: #666666;
-                background-color: #DDEBF7;
-            }
-            table.gridtable td {
-                border-width: 1px;
-                padding: 8px;
-                border-style: solid;
-                border-color: #666666;
-                background-color: #eeeeee;
-                text-align:center;
-            }
-            table.gridtable td.failed {
-                color: red;
-            }
-            table.gridtable td.successed {
-                color: green;
-            }
-            table.gridtable td.warning {
-                color: yellow;
-            }
-            table.gridtable th.error {
-                background-color: red;
-            }
-            li {
-                margin-top: 5px;
-            }
-            div{
-                margin-top: 10px;
+        '''
+        script_applied = '''
+            function toggleVisibility(id, trigger) {
+                const element = document.getElementById(id);
+                if (element.classList.contains('hidden')) {
+                    element.classList.remove('hidden');
+                    trigger.classList.add('expanded');
+                } else {
+                    element.classList.add('hidden');
+                    trigger.classList.remove('expanded');
+                }
             }
         '''
 
-        def generate_pkg_result_table(pkg):
-            pkg_result_table = table(cls='gridtable')
-            link_pkg = a(pkg['pkg'], href=pkg['repository'])
-            if pkg['error']:
-                pkg_result_table.add(th(link_pkg, colspan='2', cls='error'))
-            else:
-                pkg_result_table.add(th(link_pkg, colspan='2'))
-            for version in pkg['versions']:
-                pkg_version_tr = tr()
-                pkg_version_tr += td(version['version'])
-                if version['res'] == 'Success':
-                    pkg_version_tr += \
-                        td(a(version['res'], href=version['log_file']),
-                           cls='successed')
-                elif version['res'] == 'Failure':
-                    pkg_version_tr += \
-                        td(a(version['res'], href=version['log_file']),
-                           cls='failed')
-                else:
-                    pkg_version_tr += \
-                        td(a(version['res'], href=version['log_file']),
-                           cls='warning')
-                pkg_result_table.add(pkg_version_tr)
-            return pkg_result_table
+        def get_category_dict():
+            category_dict = {}
+            for __, pkg_res in self.pkgs_res['pkgs_res'].items():
+                pkg = pkg_res['pkg']
+                category = pkg_res['category']
+                if category not in category_dict:
+                    category_dict[category] = []
+                category_dict[category].append(pkg)
+            sorted_keys = sorted(category_dict.keys())
+            sorted_category_dict = {}
+            for key in sorted_keys:
+                category_dict[key].sort()
+                sorted_category_dict[key] = category_dict[key]
+            return sorted_category_dict
 
-        def get_success_pkg_num(pkgs):
-            success_pkg_num = 0
-            for __, pkg_res in pkgs.items():
-                for version in pkg_res['versions']:
-                    if version['version'] == 'latest' and \
-                            version['res'] == 'Success':
-                        success_pkg_num = success_pkg_num + 1
-            return success_pkg_num
+        def get_pkgs_availability_level_dict():
+            dict = {0: [], 1: [], 2: []}
+            for pkg, pkg_res in self.pkgs_res['pkgs_res'].items():
+                dict[pkg_res['pkg_availability_level']].append(pkg)
+            return dict
 
-        def generate_result_table():
-            result_div = div(id='pkgs_test_result')
-            result_div.add(h1('Packages Test Result'))
-            result_div.add(
-                p('Last run at: ' + self.pkgs_res['last_run_time']))
-            for rtthread_name, rtthread_res in \
-                    self.pkgs_res['pkgs_res'].items():
-                result_div = div(id='pkgs_test_result_' + rtthread_name)
-                result_div.add(
-                    h2('RT-Thread Version: ' + rtthread_name))
-                for bsp_name, bsp_res in rtthread_res.items():
-                    result_div.add(h3("bsp: {bsp}".format(bsp=bsp_name)))
-                    pkgs_num = len(bsp_res)
-                    success_num = get_success_pkg_num(bsp_res)
-                    result_div.add(
-                        p(f'{pkgs_num} packages in total, ' +
-                          f'{success_num} packages pass the test. ' +
-                          f'({success_num}/{pkgs_num})'))
-                    d = details()
-                    d.add(summary("problem packages: "))
-                    for pkg_name, pkg_res in bsp_res.items():
-                        for version in pkg_res['versions']:
-                            if version['version'] == 'latest' and \
-                                    version['res'] != 'Success':
-                                d.add(
-                                    p(a(pkg_name, href=pkg_res['repository'])))
-                    result_div.add(d)
+        def get_bsp_li(bsp, bsp_res):
+            title = bsp
+            if bsp_res['res'] == 'Failure':
+                title = '🔴 ' + title
+            elif bsp_res['res'] == 'Success':
+                title = '🟢 ' + title
+            elif bsp_res['res'] == 'Invalid':
+                title = '⚪ ' + title
+            bsp_li = li(a(title, href=bsp_res['log_file']))
+            return bsp_li
 
-                rtthread_result_table = table(cls='gridtable')
-                for bsp_name, bsp_res in rtthread_res.items():
-                    bsp_tr = tr()
-                    bsp_tr += td(bsp_name)
-                    for pkg_name, pkg_res in bsp_res.items():
-                        bsp_tr += td(generate_pkg_result_table(pkg_res))
-                    rtthread_result_table.add(bsp_tr)
+        def get_rtt_li(pkg, ver, rtt, rtt_res):
+            title = rtt
+            if rtt_res['rtt_availability_level'] == 0:
+                title = '🟢 ' + title
+            elif rtt_res['rtt_availability_level'] == 1:
+                title = '🟠 ' + title
+            elif rtt_res['rtt_availability_level'] == 2:
+                title = '🔴 ' + title
+            rtt_li = li(title)
+            item_id = pkg + '_' + ver + '_' + rtt
+            rtt_li += span(_class='expandable expanded',
+                           onclick=f"toggleVisibility('{item_id}', this)")
+            rtt_ul = ul(id=item_id)
+            for bsp, bsp_res in rtt_res['bsp_res'].items():
+                rtt_ul += get_bsp_li(bsp, bsp_res)
+            rtt_li += rtt_ul
+            return rtt_li
+
+        def get_version_li(pkg, ver, ver_res):
+
+            title = ver
+            if ver_res['version_availability_level'] == 0:
+                title = '🟢 ' + title
+            elif ver_res['version_availability_level'] == 1:
+                title = '🟠 ' + title
+            elif ver_res['version_availability_level'] == 2:
+                title = '🔴 ' + title
+            version_li = li(title)
+            item_id = pkg + '_' + ver
+            version_li += span(_class='expandable expanded',
+                               onclick=f"toggleVisibility('{item_id}', this)")
+            version_ul = ul(_class='expanded', id=item_id)
+
+            for rtt, rtt_res in ver_res['rtt_res'].items():
+                version_ul += get_rtt_li(pkg, ver, rtt, rtt_res)
+
+            version_li += version_ul
+            return version_li
+
+        def generate_doc():
+            doc_div = div(id='pkgs_test_result')
+            doc_div += h1('RT-Thread Packages Test Result')
+            doc_div += p('Last run at: ' + self.pkgs_res['last_run_time'])
+
+            doc_div += h2('Instructions')
+            desc = details()
+            desc += summary("Symbol Description")
+            desc += p("Package availability level:")
+            desc += p("🟢: All versions pass.")
+            desc += p("🟠: Master(RT-Thread) latest(package) pass.")
+            desc += p("🔴: Master(RT-Thread) latest(package) not pass.")
+
+            desc += p("Package Version availability level:")
+            desc += p("🟢: All RT-Thread versions pass.")
+            desc += p("🟠: Master(RT-Thread) pass.")
+            desc += p("🔴: Master(RT-Thread) not pass.")
+
+            desc += p("RT-Thread availability level:")
+            desc += p("🟢: All bsps pass.")
+            desc += p("🟠: Part of bsps pass.")
+            desc += p("🔴: None bsp pass.")
+
+            desc += p("Test result:")
+            desc += p("🟢: Success")
+            desc += p("🔴: Failure")
+            desc += p("⚪: Invalid")
+
+            doc_div += desc
+
+            doc_div += h2('Summary')
+
+            pkgs_num = 0
+            level_num = {}
+            for level, pkg_list in self.pkgs_availability_level_dict.items():
+                level_num[level] = len(pkg_list)
+                pkgs_num += level_num[level]
+            doc_div += p(f"Tested {pkgs_num} packages.")
+            for level, num in level_num.items():
+                d = details()
+                if level == 0:
+                    d += summary(f"🟢: ({num}/{pkgs_num}) All versions pass.")
+                elif level == 1:
+                    d += summary(f"🟠: ({num}/{pkgs_num}) " +
+                                 "Master(RT-Thread) latest(package) pass.")
+                elif level == 2:
+                    d += summary(f"🔴: ({num}/{pkgs_num}) " +
+                                 "Master(RT-Thread) latest(package) not pass.")
+                pkgs_text = ''
+                for pkg in self.pkgs_availability_level_dict[level]:
+                    pkgs_text += pkg
+                    pkgs_text += ', '
+                d += p(pkgs_text)
+                doc_div += d
+
+            doc_div += h2('Detailed test results:')
+            pkgs_ul = ul()
+            pkgs_res = self.pkgs_res['pkgs_res']
+            for category, pkg_list in self.category_dict.items():
+                category_li = li(category)
+                category_li += span(_class='expandable',
+                                    onclick=("toggleVisibility('" +
+                                             category +
+                                             "', this)"))
+                category_ul = ul(_class='hidden', id=category)
+                for pkg in pkg_list:
+                    pkg_res = pkgs_res[pkg]
+                    title = pkg
+                    if pkg_res['pkg_availability_level'] == 0:
+                        title = '🟢 ' + title
+                    elif pkg_res['pkg_availability_level'] == 1:
+                        title = '🟠 ' + title
+                    elif pkg_res['pkg_availability_level'] == 2:
+                        title = '🔴 ' + title
+                    pkg_li = li(a(title, href=pkgs_res[pkg]['repository']))
+                    pkg_li += span(_class='expandable',
+                                   onclick=f"toggleVisibility('{pkg}', this)")
+                    pkg_ul = ul(_class='hidden', id=pkg)
+
+                    for ver, ver_res in pkg_res['versions'].items():
+                        pkg_ul += get_version_li(pkg, ver, ver_res)
+                    pkg_li += pkg_ul
+                    category_ul += pkg_li
+
+                pkgs_ul += category_li
+                category_li += category_ul
+
+            doc_div += pkgs_ul
+            return doc_div
+
+        self.category_dict = get_category_dict()
+        self.pkgs_availability_level_dict = get_pkgs_availability_level_dict()
 
         html_root = html()
-        with html_root.add(head()):
-            style(style_applied, type='text/css')
-        with html_root.add(body()):
-            generate_result_table()
+        html_root += head(style(style_applied, type='text/css'))
+        html_root += body(generate_doc())
+        html_root += script(script_applied)
+
         return html_root.render()
 
     def master_tab(self, tab=True):
