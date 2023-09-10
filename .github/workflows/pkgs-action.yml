@@ -98,6 +98,13 @@ jobs:
           cd ${{ github.workspace }}
           mkdir -p ./pkgs-test/env/packages
           cp -r ./repository ./pkgs-test/env/packages/packages
+      - name: Copy RT-Thread/rt-thread(master) to rtthread/master
+        if: "${{ endsWith(github.repository, '/rt-thread') == true }}"
+        shell: bash 
+        run: |
+          cd ${{ github.workspace }}
+          mkdir -p ./pkgs-test/rtthread/
+          cp -r ./repository ./pkgs-test/rtthread/master
       - name: Install Test Resources
         shell: bash
         run: |
