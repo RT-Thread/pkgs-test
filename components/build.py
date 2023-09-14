@@ -3,10 +3,11 @@ import re
 import json
 import shutil
 import threading
+import pexpect
 
 
 class Build:
-    def __init__(self, config, pkgs_index, logs, sem=16):
+    def __init__(self, config, pkgs_index, logs, sem=16, qemu=False):
         self.sem_total = threading.Semaphore(sem)
         self.sem_stm32 = threading.Semaphore(1)
         self.config = config
@@ -16,6 +17,8 @@ class Build:
         self.logs_path = logs.path()
         self.root = os.getcwd()
         self.__debug = False
+        self.qemu = qemu
+        self.qemu_json_path = '../repository/.github/workflows/qemu.json'
 
     def __build_pyconfig(self, bsp_path, pkg, pkg_ver, log_path):
         print('build', bsp_path, pkg['name'], pkg_ver['version'])
@@ -141,6 +144,8 @@ class Build:
         (flag, pkg_path) = self.__build_pkgs_update(
             bsp_path, pkg, pkg_ver, log_path, flag)
         flag = self.__build_scons(bsp_path, tools, log_path, flag)
+        if self.qemu and 'qemu' in bsp_path:
+            flag = self.__qemu(bsp_path, log_path, flag, pkg, pkg_ver)
         os.rename(log_path, log_path + '-' + flag + '.txt')
         print('mv ' + log_path + ' ' + log_path + '-' + flag + '.txt')
 
@@ -149,6 +154,58 @@ class Build:
         elif pkg_path:
             self.__verify_pkg(pkg_path, bsp_path, tools, log_path)
         self.sem_total.release()
+
+    def __qemu(self, bsp_path, log_path, flag, pkg, pkg_ver):
+        if flag == 'Success':
+            qemu_script = f'{bsp_path}/qemu-nographic.sh'
+            with open(qemu_script, 'r') as file:
+                content = file.read()
+            content = "DIR=$(dirname \"$0\")\n" + content
+            content = content.replace('"sd.bin"',
+                                      '"$DIR/sd.bin"')
+            content = content.replace('=sd.bin',
+                                      '="$DIR/sd.bin"')
+            content = content.replace('rtthread.bin',
+                                      '"$DIR/rtthread.bin"')
+            content = content.replace('sd.bin\n',
+                                      '"$DIR/sd.bin"\n')
+            with open(qemu_script, 'w') as file:
+                file.write(content)
+            command = f'sh {qemu_script}'
+            print(command)
+            qemu_app = pexpect.spawn(command)
+            qemu_json_path = self.qemu_json_path
+            qemu_target_input = []
+            qemu_target_output = ''
+            if os.path.exists(qemu_json_path):
+                with open(qemu_json_path, 'r', encoding='utf-8') as file:
+                    qemu_json = json.load(file)
+                    name = pkg['name']
+                    ver = pkg_ver['version']
+                    if name in qemu_json and ver in qemu_json[name]:
+                        qemu_target_input = qemu_json[name][ver]['input']
+                        qemu_target_output = qemu_json[name][ver]['output']
+            if qemu_target_output == '':
+                qemu_target_output = 'msh />'
+            print("qemu check, find: " + qemu_target_output)
+            for input in qemu_target_input:
+                qemu_app.sendline(input)
+
+            qemu_exit_list = [qemu_target_output, pexpect.EOF, pexpect.TIMEOUT]
+            qemu_exit_index = qemu_app.expect(qemu_exit_list)
+            qemu_app.sendcontrol('a')
+            qemu_app.send('x')
+            qemu_output = qemu_app.before.decode('utf-8')
+            if qemu_exit_index == 0:
+                flag = 'Success'
+                qemu_output += f'Get "{qemu_target_output}"!'
+                print(f'Find "{qemu_target_output}"!')
+            else:
+                print(f'Not find "{qemu_target_output}"!')
+                flag = 'Failure'
+            with open(log_path, mode='a') as file:
+                file.write(qemu_output)
+        return flag
 
     def debug(self, value=True):
         self.__debug = value

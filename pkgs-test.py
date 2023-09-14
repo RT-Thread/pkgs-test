@@ -41,11 +41,14 @@ def init_parser():
                         help='Repository name to seek.',
                         default='')
     parser.add_argument('--append_res', action='store_true',
-                        help='Append test tes to old res from githubpage.',
+                        help='Append test res to old res from githubpage.',
                         default=False)
     parser.add_argument('--pages_url', action='store',
                         help='Pkgs test res github pages url.',
                         default='')
+    parser.add_argument('-q', '--qemu', action='store_true',
+                        help='Test qume output.',
+                        default=False)
 
     subparsers = parser.add_subparsers(dest='command')
 
@@ -138,7 +141,7 @@ def test_run(args):
             logs.pages_url = args.pages_url
         logs.append_res = True
 
-    build = Build(config, pkgs_config_dict, logs, args.j)
+    build = Build(config, pkgs_config_dict, logs, args.j, args.qemu)
 
     build.debug(args.debug)
     if args.verify:
