@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import zipfile
 import shutil
@@ -99,10 +100,25 @@ class Config:
         if not os.path.exists(path):
             os.makedirs(path)
 
+    def __touch_env(self):
+        rtt_list = self.config_data['rtthread']
+        rtt_name = ''
+        for rtt in rtt_list:
+            if rtt['name'] == 'master':
+                rtt_name = rtt['name']
+                break
+        if rtt_name == '' and len(rtt_list) > 0:
+            rtt_name = rtt_list[0]['name']
+        if rtt_name != '':
+            sys.path.append(os.path.join(os.getcwd(), 'rtthread', rtt_name))
+            import tools.menuconfig
+            tools.menuconfig.touch_env()
+
     def get_resources(self):
         for resource in self.resources:
             self.__get_resource(resource)
         self.__get_env()
+        self.__touch_env()
 
     def config_pkgs(self, pkgs_str):
         lines = pkgs_str.split("\n")
