@@ -111,8 +111,8 @@ class Config:
             rtt_name = rtt_list[0]['name']
         if rtt_name != '':
             sys.path.append(os.path.join(os.getcwd(), 'rtthread', rtt_name))
-            import tools.menuconfig
-            tools.menuconfig.touch_env()
+            import tools.menukconfig
+            tools.menukconfig.touch_env()
 
     def get_resources(self):
         for resource in self.resources:
