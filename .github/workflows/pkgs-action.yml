@@ -81,12 +81,12 @@ on:
 jobs:
   packages-test:
     name: ${{ github.repository }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@main
         with:
           path: repository
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@main
         with:
           repository: '${{ inputs.pkgs-test-repository }}'
           ref: '${{ inputs.pkgs-test-branch }}'
@@ -147,13 +147,13 @@ jobs:
           fi
           echo "$COMMAND" 
           eval "$COMMAND"    
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@main
         with:
           name: artifacts_export
           path: ${{ github.workspace }}/pkgs-test/artifacts_export
 
   check-errors:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: packages-test
     if: "${{ inputs.check-errors }}"
     steps:
@@ -179,7 +179,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: packages-test
     if: "${{ inputs.deploy-pages }}"
     steps:
