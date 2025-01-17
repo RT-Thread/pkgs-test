@@ -157,12 +157,12 @@ jobs:
     needs: packages-test
     if: "${{ inputs.check-errors }}"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@main
         with:
           repository: '${{ inputs.pkgs-test-repository }}'
           ref: '${{ inputs.pkgs-test-branch }}'      
       - name: Download artifacts_export
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@main
         with:
           name: artifacts_export
       - name: Install Tools
@@ -184,13 +184,13 @@ jobs:
     if: "${{ inputs.deploy-pages }}"
     steps:
       - name: Download artifacts_export
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@main
         with:
           name: artifacts_export
       - name: Setup Pages
-        uses: actions/configure-pages@v3
+        uses: actions/configure-pages@main
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@main
         with:
           # Upload entire repository
           path: '.'
