@@ -77,16 +77,12 @@ class Build:
 
     def __build_scons(self, bsp_path, tools, log_path, flag):
         if flag == 'Success':
-            if 'stm32' in bsp_path:
-                self.sem_stm32.acquire()
             os.environ['RTT_CC'] = 'gcc'
             os.environ['RTT_EXEC_PATH'] = tools
             command = 'scons -j16'
             print(bsp_path + ' ' + command)
             ret = os.system(command + ' -C ' + bsp_path +
                             ' >> ' + log_path + ' 2>&1')
-            if 'stm32' in bsp_path:
-                self.sem_stm32.release()
             if ret == 0:
                 flag = 'Success'
             else:
@@ -141,9 +137,17 @@ class Build:
             return
 
         flag = self.__build_pyconfig(bsp_path, pkg, pkg_ver, log_path)
-        (flag, pkg_path) = self.__build_pkgs_update(
-            bsp_path, pkg, pkg_ver, log_path, flag)
-        flag = self.__build_scons(bsp_path, tools, log_path, flag)
+        # STM32 BSP copies share libraries during package updates and builds.
+        is_stm32 = 'stm32' in bsp_path
+        if is_stm32:
+            self.sem_stm32.acquire()
+        try:
+            (flag, pkg_path) = self.__build_pkgs_update(
+                bsp_path, pkg, pkg_ver, log_path, flag)
+            flag = self.__build_scons(bsp_path, tools, log_path, flag)
+        finally:
+            if is_stm32:
+                self.sem_stm32.release()
         if self.qemu and 'qemu' in bsp_path:
             flag = self.__qemu(bsp_path, log_path, flag, pkg, pkg_ver)
         os.rename(log_path, log_path + '-' + flag + '.txt')
